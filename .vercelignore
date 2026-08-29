@@ -1,4 +1,6 @@
 server.js
+ai-engine.js
+ai-cache.js
 data/
 node_modules/
 *.log

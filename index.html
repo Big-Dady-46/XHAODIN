@@ -2277,7 +2277,7 @@
     const fbDb = firebase.database();
     let firebaseReady = false;
 
-    function checkAndInitWebSocket() {
+    function checkAndInitFirebase() {
       initFirebaseListeners();
     }
 
@@ -2709,7 +2709,7 @@
       sessionTerminatedModal.classList.add('hidden');
       sessionTerminatedModal.classList.remove('flex');
       if (currentUser) {
-        checkAndInitWebSocket();
+        checkAndInitFirebase();
       }
     });
 
@@ -2875,7 +2875,7 @@
       renderStatusPanel();
       renderCallsPanel();
       renderAvailableUsersDrawer();
-      checkAndInitWebSocket();
+      checkAndInitFirebase();
       requestDesktopNotificationPermission();
       dismissSplashScreen();
     }
@@ -2969,7 +2969,7 @@
       if (!email) return;
 
       authError?.classList.add('hidden');
-      checkAndInitWebSocket();
+      checkAndInitFirebase();
 
       const displayName = isRegisterMode && username ? username : (username || email.split('@')[0]);
       const chosenAvatar = selectedAuthAvatar || getAvatarForUser(displayName);
@@ -3078,7 +3078,7 @@
     });
 
     if (currentUser) {
-      checkAndInitWebSocket();
+      checkAndInitFirebase();
       updateAiUnreadDot();
     } else {
       authScreen.classList.remove('hidden');

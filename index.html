@@ -2330,43 +2330,55 @@
       firebaseReady = true;
       if (!currentUser) return;
 
+      // 1. Live Users Sync - ONLY real Firebase users
       fbDb.ref('users').on('value', snap => {
         const allUsers = snap.val() || {};
-        Object.keys(allUsers).forEach(uid => { usersMap[uid] = allUsers[uid]; });
+        usersMap = {};
+        Object.keys(allUsers).forEach(uid => {
+          if (allUsers[uid]) {
+            usersMap[uid] = sanitizeUserData(allUsers[uid]);
+          }
+        });
         if (!usersMap['xhaodin_ai_bot']) {
-          usersMap['xhaodin_ai_bot'] = { uid: 'xhaodin_ai_bot', username: 'XHAODIN AI', email: 'ai@xhaodin.local', online: true, accountStatus: 'approved', role: 'bot', isBot: true };
+          usersMap['xhaodin_ai_bot'] = {
+            uid: 'xhaodin_ai_bot',
+            username: 'XHAODIN AI',
+            email: 'ai@xhaodin.local',
+            online: true,
+            accountStatus: 'approved',
+            role: 'bot',
+            isBot: true,
+            status: 'Always online AI companion'
+          };
         }
         saveLocalData();
         renderSidebarList();
         renderAvailableUsersDrawer();
       });
 
+      // 2. Live Messages Sync
       fbDb.ref('messages').on('value', snap => {
         const allMsgs = snap.val() || {};
-        const myUid = currentUser.uid;
+        const myUid = currentUser ? currentUser.uid : '';
+        const updatedDb = {};
         Object.keys(allMsgs).forEach(chatId => {
           if (chatId.includes(myUid) || chatId.startsWith('group_')) {
-            const msgs = allMsgs[chatId];
-            if (msgs) {
+            const rawChatMsgs = allMsgs[chatId];
+            if (rawChatMsgs && typeof rawChatMsgs === 'object') {
               const prevMsgs = messagesDb[chatId] || [];
-              messagesDb[chatId] = Object.values(msgs);
-              messagesDb[chatId].sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
-              const newMsgs = messagesDb[chatId].filter(m => m.senderId === 'xhaodin_ai_bot' && !prevMsgs.some(pm => pm.id === m.id));
-              if (newMsgs.length > 0 && activePartnerUid !== 'xhaodin_ai_bot') {
-                aiUnreadCount += newMsgs.length;
-                localStorage.setItem('xhaodin_ai_unread', String(aiUnreadCount));
-                updateAiUnreadDot();
-              }
+              const list = Array.isArray(rawChatMsgs) ? rawChatMsgs : Object.values(rawChatMsgs);
+              list.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+              updatedDb[chatId] = list;
+
               if (activeChatId === chatId) {
-                loadActiveChatMessages();
-                messagesDb[chatId].forEach(m => {
+                list.forEach(m => {
                   if (m.senderId !== myUid && m.status !== 'read') {
                     m.status = 'read';
                     firebaseUpdate('messages/' + chatId + '/' + m.id, { status: 'read' });
                   }
                 });
               } else {
-                const newIncoming = messagesDb[chatId].filter(m => m.senderId !== myUid && m.senderId !== 'xhaodin_ai_bot' && !prevMsgs.some(pm => pm.id === m.id));
+                const newIncoming = list.filter(m => m.senderId !== myUid && m.senderId !== 'xhaodin_ai_bot' && !prevMsgs.some(pm => pm.id === m.id));
                 newIncoming.forEach(m => {
                   playNotificationSound();
                   showDesktopPushNotification(m.senderName || 'Contact', m.text || 'Message', chatId, m.senderId);
@@ -2375,40 +2387,94 @@
             }
           }
         });
+        messagesDb = updatedDb;
         saveLocalData();
+        if (activeChatId) {
+          loadActiveChatMessages();
+        }
         renderSidebarList();
       });
 
+      // 3. Live Groups Sync
       fbDb.ref('groups').on('value', snap => {
         groupsMap = snap.val() || {};
         if (!groupsMap['group_global_community']) {
-          groupsMap['group_global_community'] = { id: 'group_global_community', name: 'Global Community', members: Object.keys(usersMap), createdBy: 'system', isMainGroup: true, timestamp: Date.now() };
+          groupsMap['group_global_community'] = {
+            id: 'group_global_community',
+            name: '🌍 Global Community Lounge',
+            icon: '🌍',
+            createdBy: 'system',
+            isMainGroup: true,
+            members: ['all'],
+            createdAt: 1700000000000
+          };
           firebaseWrite('groups/group_global_community', groupsMap['group_global_community']);
         }
         saveLocalData();
         renderSidebarList();
       });
 
+      // 4. Live Statuses / Stories Sync (Proper Array Parsing)
       fbDb.ref('statuses').on('value', snap => {
-        statusesDb = snap.val() || {};
+        const raw = snap.val() || {};
+        const list = [];
+        Object.keys(raw).forEach(k => {
+          const item = raw[k];
+          if (item && typeof item === 'object') {
+            item.firebaseKey = k;
+            item.id = item.id || k;
+            if (!Array.isArray(item.views)) item.views = [];
+            list.push(item);
+          }
+        });
+        list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+        statusesDb = list;
         saveLocalData();
         renderStatusPanel();
       });
 
-      if (currentUser.role === 'admin') {
-        fbDb.ref('pendingUsers').on('value', snap => {
-          adminPendingUsers = snap.val() || {};
-          updateAdminBadges();
-          if (activePanel === 'admin') renderAdminPendingList();
+      // 5. Live Typing Indicators Sync
+      fbDb.ref('typing').on('value', snap => {
+        const allTyping = snap.val() || {};
+        typingUsers.clear();
+        Object.keys(allTyping).forEach(chatId => {
+          const chatTyping = allTyping[chatId] || {};
+          Object.keys(chatTyping).forEach(uid => {
+            const info = chatTyping[uid];
+            if (info && info.isTyping && Date.now() - (info.ts || 0) < 6000) {
+              if (currentUser && uid !== currentUser.uid) {
+                typingUsers.set(uid, info.name || 'typing...');
+              }
+            }
+          });
         });
-      }
+        renderSidebarList();
+        if (activeChatId && activePartnerUid) {
+          const isTyping = typingUsers.get(activePartnerUid);
+          if (isTyping) {
+            activeChatSubtitle.innerHTML = '<span class="typing-live-text">typing...</span>';
+          } else if (activeChatType !== 'group') {
+            const partner = usersMap[activePartnerUid];
+            activeChatSubtitle.innerText = partner?.online ? 'online' : (partner?.lastSeen ? `last seen at ${formatTime(partner.lastSeen)}` : 'offline');
+          }
+        }
+      });
 
-      const myPresenceRef = fbDb.ref('presence/' + currentUser.uid);
+      // 6. Live Call Signals Listener (Instant & Reliable)
+      fbDb.ref('call_signals/' + currentUser.uid).on('child_added', snap => {
+        const sigData = snap.val();
+        if (sigData && Date.now() - (sigData.ts || 0) < 60000) {
+          handleCallSignal(sigData);
+        }
+        snap.ref.remove();
+      });
+
+      // 7. Presence / Online Status Tracking
+      const myUserRef = fbDb.ref('users/' + currentUser.uid);
       fbDb.ref('.info/connected').on('value', snap => {
         if (snap.val() === true) {
-          myPresenceRef.set({ online: true, lastSeen: Date.now() });
-          myPresenceRef.onDisconnect().set({ online: false, lastSeen: Date.now() });
-          firebaseUpdate('users/' + currentUser.uid, { online: true, lastSeen: Date.now() });
+          myUserRef.update({ online: true, lastSeen: Date.now() });
+          myUserRef.onDisconnect().update({ online: false, lastSeen: Date.now() });
         }
       });
 
@@ -2428,7 +2494,7 @@
     function firebasePush(path, data) { return fbDb.ref(path).push(data); }
     function firebaseRemove(path) { return fbDb.ref(path).remove(); }
 
-    // --- sendWS replacement: routes to Firebase RTDB ---
+    // --- Core Action Dispatcher (Direct to Firebase RTDB) ---
     function sendWS(type, data) {
       if (!currentUser) return;
       switch (type) {
@@ -2544,7 +2610,7 @@
           }
           break;
         case 'POST_STATUS':
-          if (data && data.statusItem) firebasePush('statuses', data.statusItem);
+          if (data && data.statusItem) firebaseWrite('statuses/' + data.statusItem.id, data.statusItem);
           break;
         case 'DELETE_STATUS':
           if (data && data.statusId) firebaseRemove('statuses/' + data.statusId);
@@ -2557,26 +2623,15 @@
             });
           }
           break;
-        case 'ADMIN_APPROVE_USER':
-          if (data && data.targetUid) {
-            fbDb.ref('pendingUsers/' + data.targetUid).once('value', function(snap) {
-              var pending = snap.val();
-              if (pending) {
-                firebaseWrite('users/' + data.targetUid, Object.assign({}, pending, { accountStatus: 'approved', role: 'user' }));
-                firebaseRemove('pendingUsers/' + data.targetUid);
-              }
-            });
-          }
-          break;
-        case 'ADMIN_REJECT_USER':
-          if (data && data.targetUid) firebaseRemove('pendingUsers/' + data.targetUid);
-          break;
-        case 'ADMIN_BAN_USER':
-          if (data && data.targetUid) firebaseUpdate('users/' + data.targetUid, { accountStatus: data.banned ? 'banned' : 'approved', banReason: data.reason || '' });
-          break;
         case 'CALL_SIGNAL':
           if (data && data.targetUid && data.signalType && data.callData) {
-            firebasePush('calls/' + data.callData.callId + '/signals', { targetUid: data.targetUid, signalType: data.signalType, callData: data.callData, from: currentUser.uid, ts: Date.now() });
+            firebasePush('call_signals/' + data.targetUid, {
+              targetUid: data.targetUid,
+              signalType: data.signalType,
+              callData: data.callData,
+              from: currentUser.uid,
+              ts: Date.now()
+            });
           }
           break;
       }
@@ -2950,20 +3005,25 @@
         fbAuth.signInWithEmailAndPassword(email, password).then(function(cred) {
           fbDb.ref('users/' + cred.user.uid).once('value').then(function(snap) {
             var u = snap.val();
-            if (u && u.accountStatus === 'approved') {
-              loginUser(u);
-            } else if (u && u.accountStatus === 'pending') {
-              if (pendingUserEmailLabel) {
-                pendingUserEmailLabel.innerText = email;
-              }
-              pendingApprovalModal?.classList.remove('hidden');
-              pendingApprovalModal?.classList.add('flex');
-              authScreen?.classList.add('hidden');
-              chatScreen?.classList.add('hidden');
-            } else if (u && u.accountStatus === 'banned') {
+            if (!u) {
+              var fallbackName = cred.user.displayName || email.split('@')[0];
+              u = {
+                uid: cred.user.uid,
+                username: fallbackName,
+                email: email,
+                avatar: chosenAvatar,
+                status: 'Hey there! I am using XHAODIN.',
+                online: true,
+                lastSeen: Date.now(),
+                accountStatus: 'approved',
+                role: email.toLowerCase() === 'admin@gmail.com' ? 'admin' : 'user'
+              };
+              fbDb.ref('users/' + cred.user.uid).set(u);
+            }
+            if (u.accountStatus === 'banned') {
               if (authError) { authError.innerText = '❌ Your account has been banned.'; authError.classList.remove('hidden'); }
             } else {
-              if (authError) { authError.innerText = '❌ Account not found. Please register.'; authError.classList.remove('hidden'); }
+              loginUser(u);
             }
             if (authSubmitBtn) {
               authSubmitBtn.disabled = false;
@@ -2971,9 +3031,49 @@
             }
           });
         }).catch(function(err) {
-          if (authError) { authError.innerText = '❌ ' + err.message; authError.classList.remove('hidden'); }
+          if (authError) { authError.innerText = '❌ ' + err.message.replace('Firebase: ', ''); authError.classList.remove('hidden'); }
           if (authSubmitBtn) { authSubmitBtn.disabled = false; authSubmitBtn.innerHTML = '<span>Enter XHAODIN</span>'; }
         });
+      }
+    });
+
+    // ----------------------------------------------------------------------
+    // Persistent Firebase Auth State Observer
+    // ----------------------------------------------------------------------
+    fbAuth.onAuthStateChanged(function(user) {
+      if (user) {
+        fbDb.ref('users/' + user.uid).once('value').then(function(snap) {
+          var u = snap.val();
+          if (!u) {
+            var dName = user.displayName || user.email.split('@')[0];
+            u = {
+              uid: user.uid,
+              username: dName,
+              email: user.email,
+              avatar: getAvatarForUser(dName),
+              status: 'Hey there! I am using XHAODIN.',
+              online: true,
+              lastSeen: Date.now(),
+              accountStatus: 'approved',
+              role: user.email.toLowerCase() === 'admin@gmail.com' ? 'admin' : 'user'
+            };
+            fbDb.ref('users/' + user.uid).set(u);
+          }
+          if (u.accountStatus !== 'banned') {
+            loginUser(u);
+          } else {
+            fbAuth.signOut();
+            authScreen.classList.remove('hidden');
+            chatScreen.classList.add('hidden');
+            dismissSplashScreen();
+          }
+        });
+      } else {
+        if (!currentUser) {
+          authScreen.classList.remove('hidden');
+          chatScreen.classList.add('hidden');
+          dismissSplashScreen();
+        }
       }
     });
 
@@ -4736,25 +4836,43 @@
     newContactForm.addEventListener('submit', (e) => {
       e.preventDefault();
       const val = newContactInput.value.trim();
-      if (val) {
-        const cUid = 'user_' + val.toLowerCase().replace(/[^a-zA-Z0-9]/g, '_');
-        if (!usersMap[cUid]) {
-          usersMap[cUid] = {
-            uid: cUid,
-            username: val,
-            email: val.includes('@') ? val : `${val}@gmail.com`,
-            avatar: getAvatarForUser(val),
-            online: true,
-            lastSeen: Date.now()
-          };
-          saveLocalData();
+      if (val && currentUser) {
+        let foundUid = null;
+        Object.keys(usersMap).forEach(uid => {
+          const u = usersMap[uid];
+          if (u && uid !== currentUser.uid && (u.email?.toLowerCase() === val.toLowerCase() || u.username?.toLowerCase() === val.toLowerCase())) {
+            foundUid = uid;
+          }
+        });
+        if (foundUid) {
+          newContactModal.classList.add('hidden');
+          newContactModal.classList.remove('flex');
+          newContactInput.value = '';
+          const compositeChatId = getDirectChatId(currentUser.uid, foundUid);
+          openChat(compositeChatId, usersMap[foundUid].username || usersMap[foundUid].email, 'direct', foundUid);
+        } else {
+          fbDb.ref('users').once('value').then(snap => {
+            const all = snap.val() || {};
+            let matchUid = null;
+            Object.keys(all).forEach(uid => {
+              const u = all[uid];
+              if (u && uid !== currentUser.uid && (u.email?.toLowerCase() === val.toLowerCase() || u.username?.toLowerCase() === val.toLowerCase())) {
+                matchUid = uid;
+              }
+            });
+            if (matchUid) {
+              usersMap[matchUid] = sanitizeUserData(all[matchUid]);
+              newContactModal.classList.add('hidden');
+              newContactModal.classList.remove('flex');
+              newContactInput.value = '';
+              renderSidebarList();
+              const compositeChatId = getDirectChatId(currentUser.uid, matchUid);
+              openChat(compositeChatId, all[matchUid].username || all[matchUid].email, 'direct', matchUid);
+            } else {
+              alert('No registered Firebase user found with: "' + val + '".\nOnly registered Firebase users can be chatted with.');
+            }
+          });
         }
-        newContactModal.classList.add('hidden');
-        newContactModal.classList.remove('flex');
-        newContactInput.value = '';
-        renderSidebarList();
-        const compositeChatId = currentUser ? getDirectChatId(currentUser.uid, cUid) : cUid;
-        openChat(compositeChatId, val, 'direct', cUid);
       }
     });
 

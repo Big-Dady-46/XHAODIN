@@ -9,11 +9,8 @@
   <!-- Dynamic Futuristic XHAODIN 'X' Neural Monogram SVG Favicon -->
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cdefs%3E%3ClinearGradient id='favXhaodin' x1='0%25' y1='0%25' x2='100%25' y2='100%25'%3E%3Cstop offset='0%25' stop-color='%2300f5a0'/%3E%3Cstop offset='50%25' stop-color='%2300e599'/%3E%3Cstop offset='100%25' stop-color='%2338bdf8'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='100' height='100' rx='24' fill='%2306090c'/%3E%3Cpath d='M20 20 L40 50 L20 80 L34 80 L47 57 L60 80 L74 80 L54 50 L74 20 L60 20 L47 43 L34 20 Z' fill='url(%23favXhaodin)'/%3E%3Cpolygon points='47,38 55,50 47,62 39,50' fill='%23ffffff'/%3E%3C/svg%3E">
 
-  <!-- Auto-redirect to local server if opened as raw file -->
   <script>
-    if (window.location.protocol === 'file:') {
-      window.location.replace('http://localhost:4000');
-    }
+    // Removed local server redirect - now runs on Vercel as static site
   </script>
 
   <!-- Google Fonts: Orbitron, Space Grotesk, Plus Jakarta Sans, Poppins -->
@@ -33,6 +30,11 @@
   
   <!-- Custom XHAODIN Ultra Pro Stylesheet -->
   <link rel="stylesheet" href="css/style.css">
+
+  <!-- Firebase SDK (Compat Mode for inline script) -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
 </head>
 
 <body class="bg-[#06090c] text-[#f8fafc] overflow-hidden selection:bg-[#00e599] selection:text-[#06090c] h-screen w-screen m-0 p-0 font-sans">
@@ -2259,550 +2261,382 @@
     renderAuthAvatarPicker();
 
     // ----------------------------------------------------------------------
-    // 1. WebSocket Live Hub on Port 4000
+    // 1. Firebase Backend (RTDB + Auth) — replaces WebSocket server
     // ----------------------------------------------------------------------
-    let ws = null;
-    let wsRetryTimeout = null;
-    let wsRetryDelay = 3000;
-    const isHttp = window.location.protocol.startsWith('http');
-    const wsUrl = isHttp 
-      ? `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}` 
-      : 'ws://localhost:4000';
-
-    let pendingWsMessages = [];
-
-    let fallbackChannel = null;
-    try {
-      fallbackChannel = new BroadcastChannel('whatsapp_live_channel_v4000');
-      fallbackChannel.onmessage = (event) => {
-        if (event.data) handleServerMessage(event.data);
-      };
-    } catch (e) {}
+    const firebaseConfig = {
+      apiKey: "AIzaSyD-PlaceholderForSecurity",
+      authDomain: "zapchat-pro-messenger.firebaseapp.com",
+      databaseURL: "https://zapchat-pro-messenger-default-rtdb.firebaseio.com",
+      projectId: "zapchat-pro-messenger",
+      storageBucket: "zapchat-pro-messenger.appspot.com",
+      messagingSenderId: "392819284719",
+      appId: "1:392819284719:web:9c847291a82f30b91d"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const fbAuth = firebase.auth();
+    const fbDb = firebase.database();
+    let firebaseReady = false;
 
     function checkAndInitWebSocket() {
-      if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
-        return;
-      }
-      initWebSocket();
+      initFirebaseListeners();
     }
 
-    function scheduleRetry() {
-      if (!wsRetryTimeout) {
-        wsRetryTimeout = setTimeout(() => {
-          wsRetryTimeout = null;
-          wsRetryDelay = Math.min(wsRetryDelay * 2, 30000);
-          checkAndInitWebSocket();
-        }, wsRetryDelay);
-      }
-    }
-
-    function initWebSocket() {
-      if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
-        return;
-      }
-
-      try {
-        ws = new WebSocket(wsUrl);
-
-        ws.onopen = () => {
-          wsRetryDelay = 3000;
-          while (pendingWsMessages.length > 0) {
-            const msg = pendingWsMessages.shift();
-            try { ws.send(JSON.stringify(msg)); } catch (e) {}
+    function generateAIResponse(chatId, userMsg) {
+      const aiChatId = currentUser ? getDirectChatId(currentUser.uid, 'xhaodin_ai_bot') : null;
+      if (chatId !== aiChatId) return;
+      firebaseWrite('typing/' + chatId + '/xhaodin_ai_bot', { isTyping: true, name: 'XHAODIN AI', ts: Date.now() });
+      const query = (userMsg.text || '').toLowerCase();
+      let response = '';
+      if (/\b(hello|hi|hey|namaste|assalam|hola)\b/.test(query)) {
+        response = "Hello! I'm XHAODIN AI Assistant. How can I help you today?";
+      } else if (/\b(joke|funny|mazak)\b/.test(query)) {
+        const jokes = ["Why do programmers prefer dark mode? Because light attracts bugs! 🐛", "Why did the developer go broke? Because he used up all his cache! 💸", "There are only 10 types of people: those who understand binary and those who don't. 😄", "A SQL query walks into a bar, sees two tables and asks: 'Can I join you?' 🍺", "Why do Java developers wear glasses? Because they can't C#! 👓"];
+        response = jokes[Math.floor(Math.random() * jokes.length)];
+      } else if (/\b(calculate|math|solve|compute|\d+\s*[\+\-\*\/]\s*\d+)\b/.test(query)) {
+        try {
+          const mathExpr = query.replace(/[^0-9\+\-\*\/\.\(\)\s]/g, '').trim();
+          if (mathExpr && /^[\d\+\-\*\/\.\(\)\s]+$/.test(mathExpr)) {
+            const result = Function('"use strict"; return (' + mathExpr + ')')();
+            response = "🧮 The answer is: **" + result + "**";
+          } else {
+            response = "I can calculate math expressions! Try something like 'Calculate 256 * 345'.";
           }
-          if (currentUser) {
-            sendWS('USER_LOGIN', {
-              uid: currentUser.uid,
-              username: currentUser.displayName,
-              email: currentUser.email,
-              avatar: currentUser.avatar,
-              status: currentUser.status,
-              sessionId: mySessionId
+        } catch (e) { response = "Sorry, I couldn't compute that. Try a simpler math expression!"; }
+      } else if (/\b(what can you do|help|capabilities|features)\b/.test(query)) {
+        response = "I'm XHAODIN AI — here's what I can do:\n\n💻 **Coding Help** — Explain concepts, debug code\n🧮 **Math** — Calculate expressions\n😂 **Jokes** — Tell funny programming jokes\n📚 **Knowledge** — Answer general questions\n💬 **Chat** — Have a friendly conversation\n\nJust type your question!";
+      } else if (/\b(code|program|function|variable|array|loop)\b/.test(query)) {
+        response = "I love talking about code! I can help with JavaScript, Python, Java, C++, data structures, web development, databases, and debugging. What specifically would you like to learn?";
+      } else if (query.length < 5) {
+        response = "Could you tell me more? I'm here to help with coding, math, jokes, or any questions!";
+      } else {
+        const replies = ["That's a great question! I'm best at coding, math, and general knowledge. Could you be more specific?", "Interesting! Try asking me about programming, math calculations, or tell me to crack a joke! 😊", "I appreciate the question! Try coding help, math problems, or fun jokes for the best experience!"];
+        response = replies[Math.floor(Math.random() * replies.length)];
+      }
+      setTimeout(() => {
+        const botMsg = {
+          id: 'ai_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+          senderId: 'xhaodin_ai_bot', senderName: 'XHAODIN AI', text: response,
+          mediaType: 'text', mediaUrl: null, replyTo: null,
+          time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
+          timestamp: Date.now(), status: 'read', reactions: {}, starredBy: [], isAI: true
+        };
+        firebaseWrite('messages/' + chatId + '/' + botMsg.id, botMsg);
+        firebaseRemove('typing/' + chatId + '/xhaodin_ai_bot');
+      }, 500 + Math.random() * 800);
+    }
+
+    function initFirebaseListeners() {
+      if (firebaseReady) return;
+      firebaseReady = true;
+      if (!currentUser) return;
+
+      fbDb.ref('users').on('value', snap => {
+        const allUsers = snap.val() || {};
+        Object.keys(allUsers).forEach(uid => { usersMap[uid] = allUsers[uid]; });
+        if (!usersMap['xhaodin_ai_bot']) {
+          usersMap['xhaodin_ai_bot'] = { uid: 'xhaodin_ai_bot', username: 'XHAODIN AI', email: 'ai@xhaodin.local', online: true, accountStatus: 'approved', role: 'bot', isBot: true };
+        }
+        saveLocalData();
+        renderSidebarList();
+        renderAvailableUsersDrawer();
+      });
+
+      fbDb.ref('messages').on('value', snap => {
+        const allMsgs = snap.val() || {};
+        const myUid = currentUser.uid;
+        Object.keys(allMsgs).forEach(chatId => {
+          if (chatId.includes(myUid) || chatId.startsWith('group_')) {
+            const msgs = allMsgs[chatId];
+            if (msgs) {
+              const prevMsgs = messagesDb[chatId] || [];
+              messagesDb[chatId] = Object.values(msgs);
+              messagesDb[chatId].sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+              const newMsgs = messagesDb[chatId].filter(m => m.senderId === 'xhaodin_ai_bot' && !prevMsgs.some(pm => pm.id === m.id));
+              if (newMsgs.length > 0 && activePartnerUid !== 'xhaodin_ai_bot') {
+                aiUnreadCount += newMsgs.length;
+                localStorage.setItem('xhaodin_ai_unread', String(aiUnreadCount));
+                updateAiUnreadDot();
+              }
+              if (activeChatId === chatId) {
+                loadActiveChatMessages();
+                messagesDb[chatId].forEach(m => {
+                  if (m.senderId !== myUid && m.status !== 'read') {
+                    m.status = 'read';
+                    firebaseUpdate('messages/' + chatId + '/' + m.id, { status: 'read' });
+                  }
+                });
+              } else {
+                const newIncoming = messagesDb[chatId].filter(m => m.senderId !== myUid && m.senderId !== 'xhaodin_ai_bot' && !prevMsgs.some(pm => pm.id === m.id));
+                newIncoming.forEach(m => {
+                  playNotificationSound();
+                  showDesktopPushNotification(m.senderName || 'Contact', m.text || 'Message', chatId, m.senderId);
+                });
+              }
+            }
+          }
+        });
+        saveLocalData();
+        renderSidebarList();
+      });
+
+      fbDb.ref('groups').on('value', snap => {
+        groupsMap = snap.val() || {};
+        if (!groupsMap['group_global_community']) {
+          groupsMap['group_global_community'] = { id: 'group_global_community', name: 'Global Community', members: Object.keys(usersMap), createdBy: 'system', isMainGroup: true, timestamp: Date.now() };
+          firebaseWrite('groups/group_global_community', groupsMap['group_global_community']);
+        }
+        saveLocalData();
+        renderSidebarList();
+      });
+
+      fbDb.ref('statuses').on('value', snap => {
+        statusesDb = snap.val() || {};
+        saveLocalData();
+        renderStatusPanel();
+      });
+
+      if (currentUser.role === 'admin') {
+        fbDb.ref('pendingUsers').on('value', snap => {
+          adminPendingUsers = snap.val() || {};
+          updateAdminBadges();
+          if (activePanel === 'admin') renderAdminPendingList();
+        });
+      }
+
+      const myPresenceRef = fbDb.ref('presence/' + currentUser.uid);
+      fbDb.ref('.info/connected').on('value', snap => {
+        if (snap.val() === true) {
+          myPresenceRef.set({ online: true, lastSeen: Date.now() });
+          myPresenceRef.onDisconnect().set({ online: false, lastSeen: Date.now() });
+          firebaseUpdate('users/' + currentUser.uid, { online: true, lastSeen: Date.now() });
+        }
+      });
+
+      dismissSplashScreen();
+      renderSidebarList();
+      renderStatusPanel();
+      renderCallsPanel();
+      renderAvailableUsersDrawer();
+    }
+
+    // --- Firebase RTDB Write Helpers ---
+    function firebaseWrite(path, data) {
+      if (data === null || data === undefined) return fbDb.ref(path).remove();
+      return fbDb.ref(path).set(data);
+    }
+    function firebaseUpdate(path, data) { return fbDb.ref(path).update(data); }
+    function firebasePush(path, data) { return fbDb.ref(path).push(data); }
+    function firebaseRemove(path) { return fbDb.ref(path).remove(); }
+
+    // --- sendWS replacement: routes to Firebase RTDB ---
+    function sendWS(type, data) {
+      if (!currentUser) return;
+      switch (type) {
+        case 'SEND_MESSAGE':
+          if (data && data.chatId && data.message) {
+            firebaseWrite('messages/' + data.chatId + '/' + data.message.id, data.message);
+            if (data.message.senderId === 'xhaodin_ai_bot' || (data.chatId.includes('xhaodin_ai_bot') && data.message.senderId !== 'xhaodin_ai_bot')) {
+              setTimeout(function() { generateAIResponse(data.chatId, data.message); }, 800 + Math.random() * 1200);
+            }
+          }
+          break;
+        case 'TYPING_SIGNAL':
+          if (data) {
+            var tpath = 'typing/' + data.chatId + '/' + data.senderUid;
+            if (data.isTyping) firebaseWrite(tpath, { isTyping: true, name: data.senderName, ts: Date.now() });
+            else firebaseRemove(tpath);
+          }
+          break;
+        case 'MARK_READ':
+          if (data && data.chatId) {
+            var chatMsgs = messagesDb[data.chatId] || [];
+            chatMsgs.forEach(function(m) {
+              if (m.senderId !== data.readerUid && m.status !== 'read') {
+                m.status = 'read';
+                firebaseUpdate('messages/' + data.chatId + '/' + m.id, { status: 'read' });
+              }
             });
           }
-        };
-
-        ws.onmessage = (event) => {
-          try {
-            const msg = JSON.parse(event.data);
-            handleServerMessage(msg);
-          } catch (e) {}
-        };
-
-        ws.onerror = () => {};
-
-        ws.onclose = () => {
-          ws = null;
-          scheduleRetry();
-        };
-      } catch (e) {
-        scheduleRetry();
+          break;
+        case 'MARK_DELIVERED':
+          if (data && data.chatId && data.messageId) {
+            firebaseUpdate('messages/' + data.chatId + '/' + data.messageId, { status: 'delivered' });
+          }
+          break;
+        case 'REACT_MESSAGE':
+          if (data && data.chatId && data.messageId) {
+            fbDb.ref('messages/' + data.chatId + '/' + data.messageId).once('value', function(snap) {
+              var msg = snap.val();
+              if (msg) {
+                if (!msg.reactions) msg.reactions = {};
+                if (msg.reactions[data.userUid] === data.reaction) delete msg.reactions[data.userUid];
+                else msg.reactions[data.userUid] = data.reaction;
+                firebaseUpdate('messages/' + data.chatId + '/' + data.messageId, { reactions: msg.reactions });
+              }
+            });
+          }
+          break;
+        case 'STAR_MESSAGE':
+          if (data && data.chatId && data.messageId) {
+            fbDb.ref('messages/' + data.chatId + '/' + data.messageId).once('value', function(snap) {
+              var msg = snap.val();
+              if (msg) {
+                if (!msg.starredBy) msg.starredBy = [];
+                var idx = msg.starredBy.indexOf(data.userUid);
+                if (idx > -1) msg.starredBy.splice(idx, 1); else msg.starredBy.push(data.userUid);
+                firebaseUpdate('messages/' + data.chatId + '/' + data.messageId, { starredBy: msg.starredBy });
+              }
+            });
+          }
+          break;
+        case 'DELETE_MESSAGE':
+          if (data && data.chatId && data.messageId) {
+            if (data.deleteForEveryone) {
+              firebaseUpdate('messages/' + data.chatId + '/' + data.messageId, { deleted: true, text: '🚫 This message was deleted', mediaUrl: null });
+            } else {
+              fbDb.ref('messages/' + data.chatId + '/' + data.messageId).once('value', function(snap) {
+                var msg = snap.val();
+                if (msg) {
+                  if (!msg.deletedFor) msg.deletedFor = [];
+                  if (!msg.deletedFor.includes(data.senderUid)) msg.deletedFor.push(data.senderUid);
+                  firebaseUpdate('messages/' + data.chatId + '/' + data.messageId, { deletedFor: msg.deletedFor });
+                }
+              });
+            }
+          }
+          break;
+        case 'DELETE_CHAT':
+          if (data && data.chatId && data.uid) {
+            firebaseUpdate('users/' + data.uid + '/hiddenChats/' + data.chatId, true);
+            if (!hiddenChats.includes(data.chatId)) hiddenChats.push(data.chatId);
+            saveLocalData();
+            renderSidebarList();
+          }
+          break;
+        case 'UPDATE_PROFILE':
+          if (data && data.uid) {
+            var updates = {};
+            if (data.avatar) updates.avatar = data.avatar;
+            if (data.username) updates.username = data.username;
+            if (data.status) updates.status = data.status;
+            firebaseUpdate('users/' + data.uid, updates);
+            if (currentUser) {
+              if (data.avatar) currentUser.avatar = data.avatar;
+              if (data.username) currentUser.displayName = data.username;
+              if (data.status) currentUser.status = data.status;
+              sessionStorage.setItem('wa_current_user', JSON.stringify(currentUser));
+            }
+          }
+          break;
+        case 'CREATE_GROUP':
+          if (data) {
+            firebaseWrite('groups/' + data.groupId, { id: data.groupId, name: data.name, createdBy: data.createdBy, members: data.members || [data.createdBy], isMainGroup: false, timestamp: Date.now() });
+          }
+          break;
+        case 'DELETE_GROUP':
+          if (data && data.groupId) {
+            firebaseRemove('groups/' + data.groupId);
+            firebaseRemove('messages/' + data.groupId);
+            delete groupsMap[data.groupId];
+            delete messagesDb[data.groupId];
+            if (activeChatId === data.groupId) { activeChatId = null; emptyChatScreen.classList.remove('hidden'); activeChatScreen.classList.add('hidden'); }
+            saveLocalData(); renderSidebarList();
+          }
+          break;
+        case 'POST_STATUS':
+          if (data && data.statusItem) firebasePush('statuses', data.statusItem);
+          break;
+        case 'DELETE_STATUS':
+          if (data && data.statusId) firebaseRemove('statuses/' + data.statusId);
+          break;
+        case 'VIEW_STATUS':
+          if (data && data.statusId) {
+            fbDb.ref('statuses/' + data.statusId + '/views').once('value', function(snap) {
+              var views = snap.val() || [];
+              if (!views.includes(data.viewerUid)) { views.push(data.viewerUid); firebaseUpdate('statuses/' + data.statusId, { views: views }); }
+            });
+          }
+          break;
+        case 'ADMIN_APPROVE_USER':
+          if (data && data.targetUid) {
+            fbDb.ref('pendingUsers/' + data.targetUid).once('value', function(snap) {
+              var pending = snap.val();
+              if (pending) {
+                firebaseWrite('users/' + data.targetUid, Object.assign({}, pending, { accountStatus: 'approved', role: 'user' }));
+                firebaseRemove('pendingUsers/' + data.targetUid);
+              }
+            });
+          }
+          break;
+        case 'ADMIN_REJECT_USER':
+          if (data && data.targetUid) firebaseRemove('pendingUsers/' + data.targetUid);
+          break;
+        case 'ADMIN_BAN_USER':
+          if (data && data.targetUid) firebaseUpdate('users/' + data.targetUid, { accountStatus: data.banned ? 'banned' : 'approved', banReason: data.reason || '' });
+          break;
+        case 'CALL_SIGNAL':
+          if (data && data.targetUid && data.signalType && data.callData) {
+            firebasePush('calls/' + data.callData.callId + '/signals', { targetUid: data.targetUid, signalType: data.signalType, callData: data.callData, from: currentUser.uid, ts: Date.now() });
+          }
+          break;
       }
     }
 
-    function sendWS(type, data) {
-      const payload = { type, data };
-      if (ws && ws.readyState === WebSocket.OPEN) {
-        try {
-          ws.send(JSON.stringify(payload));
-        } catch (e) {}
-      } else if (ws && ws.readyState === WebSocket.CONNECTING) {
-        pendingWsMessages.push(payload);
-      }
-      if (fallbackChannel) {
-        try {
-          fallbackChannel.postMessage(payload);
-        } catch (e) {}
+    function handleCallSignal(data) {
+      const { signalType, callData } = data;
+      if (currentUser && callData) {
+        if (signalType === 'OFFER') {
+          if (callData.receiverUid === currentUser.uid) {
+            activeCallId = callData.callId;
+            currentCallData = callData;
+            currentCallType = callData.callType || 'voice';
+
+            incomingCallerName.innerText = callData.callerName || 'Contact';
+            const callAvUrl = getAvatarForUser(callData.callerName, usersMap[callData.callerUid]?.avatar);
+            if (incomingCallerAvatarImg) {
+              incomingCallerAvatarImg.src = callAvUrl;
+            }
+            incomingCallTypeBadge.innerText = `${currentCallType.toUpperCase()} CALL`;
+
+            incomingCallModal.classList.remove('hidden');
+            incomingCallModal.classList.add('flex');
+            
+            if ('vibrate' in navigator) {
+              try { navigator.vibrate([400, 300, 400, 300, 1000]); } catch (e) {}
+            }
+            playRingtone();
+
+            showDesktopPushNotification(
+              `📞 Incoming ${currentCallType.toUpperCase()} Call`,
+              `${callData.callerName || 'Contact'} is calling you on XHAODIN...`,
+              getDirectChatId(currentUser.uid, callData.callerUid),
+              callData.callerUid,
+              true
+            );
+          }
+        } else if (callData.callId === activeCallId) {
+          if (signalType === 'ANSWER' && callData.answer && peerConnection) {
+            peerConnection.setRemoteDescription(new RTCSessionDescription(callData.answer)).then(() => {
+              stopCallSounds();
+              playCallConnected();
+            }).catch(() => {});
+          } else if (signalType === 'ICE_CANDIDATE' && callData.candidate && peerConnection) {
+            peerConnection.addIceCandidate(new RTCIceCandidate(callData.candidate)).catch(() => {});
+          } else if (signalType === 'END') {
+            callModalStatus.innerText = 'Call Ended';
+            if (callSubstatus) callSubstatus.innerText = 'Call has ended';
+            playCallEnded();
+            cleanupCall();
+          }
+        }
       }
     }
 
     function handleServerMessage(msg) {
       if (!msg || typeof msg !== 'object') return;
       const { type, data } = msg;
-
-      if (type === 'SESSION_TERMINATED' && data) {
-        sessionTerminatedModal.classList.remove('hidden');
-        sessionTerminatedModal.classList.add('flex');
-        return;
-      }
-
-      if (type === 'INIT_STATE') {
-        if (data.users) usersMap = data.users;
-        if (data.groups) groupsMap = data.groups;
-        if (data.messages) messagesDb = data.messages;
-        if (data.statuses) statusesDb = data.statuses;
-        if (data.calls) myCallsList = data.calls;
-        if (data.hiddenChats) hiddenChats = data.hiddenChats;
-        if (data.pendingUsers) {
-          adminPendingUsers = data.pendingUsers;
-          updateAdminBadges();
-          if (activePanel === 'admin') renderAdminPendingList();
-        }
-        saveLocalData();
-        renderSidebarList();
-        renderStatusPanel();
-        renderCallsPanel();
-        renderAvailableUsersDrawer();
-        if (activeChatId) loadActiveChatMessages();
-        dismissSplashScreen();
-      }
-
-      // Authentication & Approval Events
-      if (type === 'AUTH_ERROR' && data) {
-        if (authError) {
-          authError.innerText = data.message || '❌ Authentication failed.';
-          authError.classList.remove('hidden');
-        }
-        if (authSubmitBtn) {
-          authSubmitBtn.disabled = false;
-          authSubmitBtn.innerHTML = isRegisterMode ? '<span>Create XHAODIN Account</span>' : '<span>Enter XHAODIN</span>';
-        }
-        pendingApprovalModal?.classList.add('hidden');
-        pendingApprovalModal?.classList.remove('flex');
-        authScreen?.classList.remove('hidden');
-        chatScreen?.classList.add('hidden');
-        return;
-      }
-
-      if (type === 'AUTH_SUCCESS' && data && data.user) {
-        if (authSubmitBtn) {
-          authSubmitBtn.disabled = false;
-          authSubmitBtn.innerHTML = isRegisterMode ? '<span>Create XHAODIN Account</span>' : '<span>Enter XHAODIN</span>';
-        }
-        currentUser = sanitizeUserData(data.user);
-        sessionStorage.setItem('wa_current_user', JSON.stringify(currentUser));
-        loginUser(currentUser);
-      }
-
-      if (type === 'AUTH_STATUS' && data) {
-        if (authSubmitBtn) {
-          authSubmitBtn.disabled = false;
-          authSubmitBtn.innerHTML = isRegisterMode ? '<span>Create XHAODIN Account</span>' : '<span>Enter XHAODIN</span>';
-        }
-        if (data.status === 'pending') {
-          if (pendingUserEmailLabel) {
-            pendingUserEmailLabel.innerText = data.user?.email || (emailInput?.value || 'your email');
-          }
-          pendingApprovalModal?.classList.remove('hidden');
-          pendingApprovalModal?.classList.add('flex');
-          authScreen?.classList.add('hidden');
-          chatScreen?.classList.add('hidden');
-        } else if (data.status === 'rejected') {
-          if (authError) {
-            authError.innerText = data.message || '❌ Your registration request was rejected by the admin.';
-            authError.classList.remove('hidden');
-          }
-          pendingApprovalModal?.classList.add('hidden');
-          pendingApprovalModal?.classList.remove('flex');
-          authScreen?.classList.remove('hidden');
-          chatScreen?.classList.add('hidden');
-        }
-      }
-
-      if (type === 'PENDING_USERS_LIST' && data) {
-        adminPendingUsers = data.pendingUsers || [];
-        updateAdminBadges();
-        if (activePanel === 'admin') renderAdminPendingList();
-      }
-
-      if (type === 'NEW_PENDING_REGISTRATION' && data && data.user) {
-        if (currentUser && currentUser.email && currentUser.email.toLowerCase() === 'admin@gmail.com') {
-          if (!adminPendingUsers.some(u => u.uid === data.user.uid)) {
-            adminPendingUsers.push(data.user);
-          }
-          updateAdminBadges();
-          if (activePanel === 'admin') renderAdminPendingList();
-          playAdminAlertSound();
-          showDesktopPushNotification(
-            '🛡️ New Registration Request',
-            `User "${data.user.username}" (${data.user.email}) is requesting account approval.`,
-            'group_global_community',
-            data.user.uid
-          );
-        }
-      }
-
-      if (type === 'USER_APPROVED' && data && data.user) {
-        const approvedUser = data.user;
-        usersMap[approvedUser.uid] = approvedUser;
-        saveLocalData();
-        renderSidebarList();
-        renderAvailableUsersDrawer();
-
-        // If waiting on pending screen and matches email, celebrate & enter!
-        if (pendingApprovalModal && !pendingApprovalModal.classList.contains('hidden')) {
-          const userEmail = pendingUserEmailLabel ? pendingUserEmailLabel.innerText.toLowerCase().trim() : '';
-          if (approvedUser.email && approvedUser.email.toLowerCase() === userEmail) {
-            pendingApprovalModal.classList.add('hidden');
-            pendingApprovalModal.classList.remove('flex');
-            currentUser = approvedUser;
-            sessionStorage.setItem('wa_current_user', JSON.stringify(currentUser));
-            loginUser(currentUser);
-          }
-        }
-      }
-
-      if (type === 'USER_REJECTED' && data) {
-        const rejectedUid = data.uid;
-        delete usersMap[rejectedUid];
-        saveLocalData();
-        renderSidebarList();
-        renderAvailableUsersDrawer();
-
-        if (pendingApprovalModal && !pendingApprovalModal.classList.contains('hidden')) {
-          const waitingEmail = pendingUserEmailLabel ? pendingUserEmailLabel.innerText.toLowerCase().trim() : '';
-          const currentPendingUid = 'user_' + waitingEmail.replace(/[^a-zA-Z0-9]/g, '_');
-          if (rejectedUid === currentPendingUid) {
-            pendingApprovalModal.classList.add('hidden');
-            pendingApprovalModal.classList.remove('flex');
-            authScreen?.classList.remove('hidden');
-            if (authError) {
-              authError.innerText = '❌ Your registration request was rejected by the administrator.';
-              authError.classList.remove('hidden');
-            }
-          }
-        }
-      }
-
-      if (type === 'USER_STATUS_CHANGE' && data && data.user) {
-        usersMap[data.user.uid] = sanitizeUserData(data.user);
-        saveLocalData();
-        renderSidebarList();
-        renderAvailableUsersDrawer();
-        if (activePartnerUid === data.user.uid) {
-          const isTypingNow = typingUsers.get(activePartnerUid);
-          if (!isTypingNow) {
-            activeChatSubtitle.innerText = data.user.online ? 'online' : (data.user.lastSeen ? `last seen at ${formatTime(data.user.lastSeen)}` : 'offline');
-            activeHeaderOnlineBeacon.classList.toggle('hidden', !data.user.online);
-          }
-          const avUrl = getAvatarForUser(data.user);
-          activeAvatarImage.src = avUrl;
-          activeAvatarImage.classList.remove('hidden');
-          activeAvatarLetter.classList.add('hidden');
-        }
-      }
-
-      if (type === 'NEW_GROUP' && data && data.group) {
-        groupsMap[data.group.id] = data.group;
-        saveLocalData();
-        renderSidebarList();
-      }
-
-      if (type === 'NEW_MESSAGE' && data) {
-        const { chatId, message } = data;
-        if (!messagesDb[chatId]) messagesDb[chatId] = [];
-        
-        if (!messagesDb[chatId].some(m => m.id === message.id)) {
-          messagesDb[chatId].push(message);
-          saveLocalData();
-        }
-
-        const isFromOther = currentUser && message.senderId !== currentUser.uid;
-
-        if (activeChatId === chatId) {
-          loadActiveChatMessages();
-          if (isFromOther) {
-            sendWS('MARK_READ', { chatId: activeChatId, readerUid: currentUser.uid });
-          }
-          if (message.senderId === 'xhaodin_ai_bot') {
-            aiUnreadCount = 0;
-            localStorage.setItem('xhaodin_ai_unread', '0');
-            updateAiUnreadDot();
-          }
-        } else if (isFromOther) {
-          if (message.senderId === 'xhaodin_ai_bot' && activePartnerUid !== 'xhaodin_ai_bot') {
-            aiUnreadCount++;
-            localStorage.setItem('xhaodin_ai_unread', String(aiUnreadCount));
-            updateAiUnreadDot();
-          }
-          sendWS('MARK_DELIVERED', { chatId: chatId, messageId: message.id, receiverUid: currentUser.uid });
-          playNotificationSound();
-          showDesktopPushNotification(
-            message.senderName || 'Contact',
-            message.text || (message.mediaType ? `[${message.mediaType.toUpperCase()}]` : 'Message'),
-            chatId,
-            message.senderId
-          );
-        }
-
-        renderSidebarList();
-      }
-
-      if (type === 'MESSAGES_DELIVERED' && data) {
-        const { chatId, messageId } = data;
-        if (messagesDb[chatId]) {
-          messagesDb[chatId].forEach(m => {
-            if ((!messageId || m.id === messageId) && m.status === 'sent') {
-              m.status = 'delivered';
-            }
-          });
-          saveLocalData();
-        }
-        if (activeChatId === chatId) {
-          loadActiveChatMessages();
-        }
-        renderSidebarList();
-      }
-
-      if (type === 'MESSAGES_READ' && data) {
-        const { chatId } = data;
-        if (messagesDb[chatId]) {
-          messagesDb[chatId].forEach(m => m.status = 'read');
-          saveLocalData();
-        }
-        if (activeChatId === chatId) {
-          loadActiveChatMessages();
-        }
-        renderSidebarList();
-      }
-
-      if (type === 'MESSAGE_REACTED' && data) {
-        const { chatId, messageId, reactions } = data;
-        if (messagesDb[chatId]) {
-          const m = messagesDb[chatId].find(x => x.id === messageId);
-          if (m) {
-            m.reactions = reactions;
-            saveLocalData();
-            if (activeChatId === chatId) loadActiveChatMessages();
-          }
-        }
-      }
-
-      if (type === 'MESSAGE_DELETED' && data) {
-        const { chatId, messageId } = data;
-        if (messagesDb[chatId]) {
-          const m = messagesDb[chatId].find(x => x.id === messageId);
-          if (m) {
-            m.deleted = true;
-            m.text = '🚫 This message was deleted';
-            m.mediaUrl = null;
-            saveLocalData();
-            if (activeChatId === chatId) loadActiveChatMessages();
-          }
-        }
-      }
-
-      if (type === 'MESSAGE_DELETED_FOR_ME' && data) {
-        const { chatId, messageId } = data;
-        if (messagesDb[chatId]) {
-          const m = messagesDb[chatId].find(x => x.id === messageId);
-          if (m) {
-            if (!m.deletedFor) m.deletedFor = [];
-            if (!m.deletedFor.includes(currentUser.uid)) {
-              m.deletedFor.push(currentUser.uid);
-            }
-            saveLocalData();
-            if (activeChatId === chatId) loadActiveChatMessages();
-          }
-        }
-      }
-
-      if (type === 'CHAT_DELETED' && data) {
-        const { chatId } = data;
-        if (!hiddenChats.includes(chatId)) hiddenChats.push(chatId);
-        if (activeChatId === chatId) {
-          activeChatId = null;
-          if (activeChatScreen) activeChatScreen.classList.add('hidden');
-          if (sidebarCol) sidebarCol.classList.remove('hidden');
-        }
-        renderSidebarList();
-      }
-
-      if (type === 'GROUP_DELETED' && data) {
-        const { groupId } = data;
-        delete groupsMap[groupId];
-        delete messagesDb[groupId];
-        if (activeChatId === groupId) {
-          activeChatId = null;
-          if (activeChatScreen) activeChatScreen.classList.add('hidden');
-          if (sidebarCol) sidebarCol.classList.remove('hidden');
-        }
-        saveLocalData();
-        renderSidebarList();
-      }
-
-      if (type === 'YOU_ARE_BANNED' && data) {
-        alert('Your account has been banned by the administrator.\nReason: ' + (data.reason || 'Violated terms'));
-        sessionStorage.clear();
-        location.reload();
-      }
-
-      if (type === 'USER_BANNED' && data) {
-        const { uid, banned, reason } = data;
-        if (usersMap[uid]) {
-          usersMap[uid].accountStatus = banned ? 'banned' : 'approved';
-          if (banned) usersMap[uid].banReason = reason;
-        }
-        renderSidebarList();
-      }
-
-      if (type === 'ONLINE_USERS' && data) {
-        const { onlineUids } = data;
-        Object.keys(usersMap).forEach(uid => {
-          usersMap[uid].online = onlineUids.includes(uid);
-        });
-        renderSidebarList();
-      }
-
-      if (type === 'MESSAGE_STARRED' && data) {
-        const { chatId, messageId, starredBy } = data;
-        if (messagesDb[chatId]) {
-          const m = messagesDb[chatId].find(x => x.id === messageId);
-          if (m) {
-            m.starredBy = starredBy;
-            saveLocalData();
-            if (activeChatId === chatId) loadActiveChatMessages();
-            if (activePanel === 'starred') renderStarredMessagesPanel();
-          }
-        }
-      }
-
-      // Realtime Live Typing Indicator (Updates subtitle to "typing..." directly)
-      if (type === 'TYPING_INDICATOR' && data) {
-        const { chatId, senderUid, senderName, isTyping } = data;
-
-        if (isTyping) {
-          typingUsers.set(senderUid, true);
-        } else {
-          typingUsers.delete(senderUid);
-        }
-
-        if (activeChatId === chatId && activePartnerUid === senderUid) {
-          if (isTyping) {
-            activeChatSubtitle.innerHTML = '<span class="typing-live-text">typing...</span>';
-            typingBubbleAuthor.innerText = senderName || 'Contact';
-            activeChatTypingBubble.classList.remove('hidden');
-            activeChatTypingBubble.classList.add('flex');
-          } else {
-            const partner = usersMap[activePartnerUid];
-            activeChatSubtitle.innerText = partner?.online ? 'online' : (partner?.lastSeen ? `last seen at ${formatTime(partner.lastSeen)}` : 'offline');
-            activeChatTypingBubble.classList.add('hidden');
-            activeChatTypingBubble.classList.remove('flex');
-          }
-        }
-
-        renderSidebarList();
-      }
-
-      // Status Updates
-      if (type === 'NEW_STATUS' && data && data.statusItem) {
-        statusesDb.unshift(data.statusItem);
-        saveLocalData();
-        railStatusDot.classList.remove('hidden');
-        renderStatusPanel();
-      }
-
-      if (type === 'STATUS_VIEWED' && data) {
-        const st = statusesDb.find(s => s.id === data.statusId);
-        if (st) {
-          st.views = data.views;
-          saveLocalData();
-          renderStatusPanel();
-        }
-      }
-
-      if (type === 'STATUS_DELETED' && data) {
-        statusesDb = statusesDb.filter(s => s.id !== data.statusId);
-        saveLocalData();
-        renderStatusPanel();
-      }
-
-      // Call Updates
-      if (type === 'CALLS_UPDATED' && data && data.calls) {
-        myCallsList = data.calls;
-        saveLocalData();
-        renderCallsPanel();
-      }
-
-      // Incoming Call Signal
       if (type === 'CALL_SIGNAL' && data) {
-        const { signalType, callData } = data;
-        if (currentUser && callData) {
-          if (signalType === 'OFFER') {
-            if (callData.receiverUid === currentUser.uid) {
-              activeCallId = callData.callId;
-              currentCallData = callData;
-              currentCallType = callData.callType || 'voice';
-
-              incomingCallerName.innerText = callData.callerName || 'Contact';
-              const callAvUrl = getAvatarForUser(callData.callerName, usersMap[callData.callerUid]?.avatar);
-              if (incomingCallerAvatarImg) {
-                incomingCallerAvatarImg.src = callAvUrl;
-              }
-              incomingCallTypeBadge.innerText = `${currentCallType.toUpperCase()} CALL`;
-
-              incomingCallModal.classList.remove('hidden');
-              incomingCallModal.classList.add('flex');
-              
-              if ('vibrate' in navigator) {
-                try { navigator.vibrate([400, 300, 400, 300, 1000]); } catch (e) {}
-              }
-              playRingtone();
-
-              showDesktopPushNotification(
-                `📞 Incoming ${currentCallType.toUpperCase()} Call`,
-                `${callData.callerName || 'Contact'} is calling you on XHAODIN...`,
-                getDirectChatId(currentUser.uid, callData.callerUid),
-                callData.callerUid,
-                true
-              );
-            }
-          } else if (callData.callId === activeCallId) {
-            if (signalType === 'ANSWER' && callData.answer && peerConnection) {
-              peerConnection.setRemoteDescription(new RTCSessionDescription(callData.answer)).then(() => {
-                stopCallSounds();
-                playCallConnected();
-              }).catch(() => {});
-            } else if (signalType === 'ICE_CANDIDATE' && callData.candidate && peerConnection) {
-              peerConnection.addIceCandidate(new RTCIceCandidate(callData.candidate)).catch(() => {});
-            } else if (signalType === 'END') {
-              callModalStatus.innerText = 'Call Ended';
-              if (callSubstatus) callSubstatus.innerText = 'Call has ended';
-              playCallEnded();
-              cleanupCall();
-            }
-          }
-        }
+        handleCallSignal(data);
       }
     }
 
@@ -2820,14 +2654,7 @@
       sessionTerminatedModal.classList.add('hidden');
       sessionTerminatedModal.classList.remove('flex');
       if (currentUser) {
-        sendWS('USER_LOGIN', {
-          uid: currentUser.uid,
-          username: currentUser.displayName,
-          email: currentUser.email,
-          avatar: currentUser.avatar,
-          status: currentUser.status,
-          sessionId: mySessionId
-        });
+        checkAndInitWebSocket();
       }
     });
 
@@ -3089,43 +2916,69 @@
       authError?.classList.add('hidden');
       checkAndInitWebSocket();
 
-      const uid = 'user_' + email.toLowerCase().replace(/[^a-zA-Z0-9]/g, '_');
       const displayName = isRegisterMode && username ? username : (username || email.split('@')[0]);
       const chosenAvatar = selectedAuthAvatar || getAvatarForUser(displayName);
 
       if (isRegisterMode) {
-        // Register Mode: create registration request for Admin approval
         authSubmitBtn.disabled = true;
         authSubmitBtn.innerHTML = '<span class="animate-pulse">Creating Account...</span>';
 
-        sendWS('USER_REGISTER', {
-          uid: uid,
-          username: displayName,
-          email: email,
-          avatar: chosenAvatar,
-          status: 'Hey there! I am using XHAODIN.',
-          sessionId: mySessionId
+        fbAuth.createUserWithEmailAndPassword(email, password).then(function(cred) {
+          var userProfile = {
+            uid: cred.user.uid,
+            username: username,
+            email: email,
+            avatar: chosenAvatar,
+            status: 'Hey there! I am using XHAODIN.',
+            online: true,
+            lastSeen: Date.now(),
+            accountStatus: 'approved',
+            role: 'user',
+            currentSessionId: mySessionId
+          };
+          fbDb.ref('users/' + cred.user.uid).set(userProfile).then(function() {
+            loginUser(userProfile);
+          });
+        }).catch(function(err) {
+          if (authError) { authError.innerText = '❌ ' + err.message; authError.classList.remove('hidden'); }
+          if (authSubmitBtn) { authSubmitBtn.disabled = false; authSubmitBtn.innerHTML = '<span>Create XHAODIN Account</span>'; }
         });
       } else {
-        // Sign In Mode: Strictly verify account exists & is approved
         authSubmitBtn.disabled = true;
         authSubmitBtn.innerHTML = '<span class="animate-pulse">Verifying Credentials...</span>';
 
-        sendWS('USER_LOGIN', {
-          uid: uid,
-          email: email,
-          sessionId: mySessionId
+        fbAuth.signInWithEmailAndPassword(email, password).then(function(cred) {
+          fbDb.ref('users/' + cred.user.uid).once('value').then(function(snap) {
+            var u = snap.val();
+            if (u && u.accountStatus === 'approved') {
+              loginUser(u);
+            } else if (u && u.accountStatus === 'pending') {
+              if (pendingUserEmailLabel) {
+                pendingUserEmailLabel.innerText = email;
+              }
+              pendingApprovalModal?.classList.remove('hidden');
+              pendingApprovalModal?.classList.add('flex');
+              authScreen?.classList.add('hidden');
+              chatScreen?.classList.add('hidden');
+            } else if (u && u.accountStatus === 'banned') {
+              if (authError) { authError.innerText = '❌ Your account has been banned.'; authError.classList.remove('hidden'); }
+            } else {
+              if (authError) { authError.innerText = '❌ Account not found. Please register.'; authError.classList.remove('hidden'); }
+            }
+            if (authSubmitBtn) {
+              authSubmitBtn.disabled = false;
+              authSubmitBtn.innerHTML = '<span>Enter XHAODIN</span>';
+            }
+          });
+        }).catch(function(err) {
+          if (authError) { authError.innerText = '❌ ' + err.message; authError.classList.remove('hidden'); }
+          if (authSubmitBtn) { authSubmitBtn.disabled = false; authSubmitBtn.innerHTML = '<span>Enter XHAODIN</span>'; }
         });
       }
     });
 
     if (currentUser) {
       checkAndInitWebSocket();
-      sendWS('USER_LOGIN', {
-        uid: currentUser.uid,
-        email: currentUser.email,
-        sessionId: mySessionId
-      });
       updateAiUnreadDot();
     } else {
       authScreen.classList.remove('hidden');
@@ -3221,14 +3074,31 @@
       if (checkApprovalSpinner) checkApprovalSpinner.classList.remove('hidden');
       const email = pendingUserEmailLabel ? pendingUserEmailLabel.innerText.trim() : (emailInput?.value || '');
       const uid = 'user_' + email.toLowerCase().replace(/[^a-zA-Z0-9]/g, '_');
-      sendWS('USER_LOGIN', {
-        uid,
-        email,
-        sessionId: mySessionId
-      });
-      setTimeout(() => {
+      fbDb.ref('users/' + uid).once('value').then(function(snap) {
+        var u = snap.val();
+        if (u && u.accountStatus === 'approved') {
+          if (pendingApprovalModal) {
+            pendingApprovalModal.classList.add('hidden');
+            pendingApprovalModal.classList.remove('flex');
+          }
+          loginUser(u);
+        } else if (u && u.accountStatus === 'rejected') {
+          if (pendingApprovalModal) {
+            pendingApprovalModal.classList.add('hidden');
+            pendingApprovalModal.classList.remove('flex');
+          }
+          authScreen?.classList.remove('hidden');
+          if (authError) {
+            authError.innerText = '❌ Your registration request was rejected by the administrator.';
+            authError.classList.remove('hidden');
+          }
+        } else if (u && u.accountStatus === 'banned') {
+          if (authError) { authError.innerText = '❌ Your account has been banned.'; authError.classList.remove('hidden'); }
+        }
         if (checkApprovalSpinner) checkApprovalSpinner.classList.add('hidden');
-      }, 1000);
+      }).catch(function() {
+        if (checkApprovalSpinner) checkApprovalSpinner.classList.add('hidden');
+      });
     });
 
     // Filter Chips Event Listeners

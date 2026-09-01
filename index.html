@@ -4237,15 +4237,14 @@
 
     // ----------------------------------------------------------------------
     // Smart Multilingual Text-to-Speech (TTS) Engine
-    // Supports Roman Urdu, Urdu (Arabic script), Hindi & English with Audio Fallback
+    // Supports Roman Urdu, Urdu (Arabic script), Hindi & English
     // ----------------------------------------------------------------------
     let currentTtsUtterance = null;
     let activeTtsButton = null;
 
     window.speakMessageText = function(btnEl, text, e) {
       if (e) {
-        e.preventDefault();
-        e.stopPropagation();
+        try { e.preventDefault(); e.stopPropagation(); } catch(err) {}
       }
       if (!text || typeof text !== 'string' || !text.trim()) return;
 
@@ -4298,7 +4297,7 @@
       const tokens = lowerClean.split(/[^a-z0-9]+/);
       const isRomanUrdu = tokens.some(t => romanUrduWords.includes(t));
 
-      // 1. Attempt Browser SpeechSynthesis API
+      // Attempt Browser SpeechSynthesis API first
       if ('speechSynthesis' in window) {
         try {
           const utterance = new SpeechSynthesisUtterance(cleanText);
@@ -4306,19 +4305,25 @@
           const voices = window.speechSynthesis.getVoices() || [];
 
           let selectedVoice = null;
-          if (isUrduScript) {
-            selectedVoice = voices.find(v => v.lang.startsWith('ur') || v.lang.includes('PK') || v.lang.startsWith('hi') || v.lang.startsWith('ar'));
-            utterance.lang = selectedVoice ? selectedVoice.lang : 'ur-PK';
-          } else if (isRomanUrdu) {
-            selectedVoice = voices.find(v => v.lang === 'hi-IN' || v.lang.startsWith('hi') || v.lang === 'ur-PK' || v.lang === 'en-IN' || (v.name && v.name.toLowerCase().includes('india')) || (v.name && v.name.toLowerCase().includes('hindi')));
-            utterance.lang = selectedVoice ? selectedVoice.lang : (voices.some(v => v.lang.startsWith('hi')) ? 'hi-IN' : 'en-US');
-          } else {
-            selectedVoice = voices.find(v => (v.lang.startsWith('en') && (v.name.includes('Natural') || v.name.includes('Google') || v.default)) || v.lang === 'en-US');
-            utterance.lang = selectedVoice ? selectedVoice.lang : 'en-US';
+          if (voices.length > 0) {
+            if (isUrduScript) {
+              selectedVoice = voices.find(v => v.lang.startsWith('ur') || v.lang.includes('PK') || v.lang.startsWith('hi') || v.lang.startsWith('ar'));
+            } else if (isRomanUrdu) {
+              selectedVoice = voices.find(v => v.lang === 'hi-IN' || v.lang.startsWith('hi') || v.lang === 'ur-PK' || v.lang === 'en-IN' || (v.name && v.name.toLowerCase().includes('india')) || (v.name && v.name.toLowerCase().includes('hindi')));
+            }
+            
+            // Fallback to English/Default installed voice
+            if (!selectedVoice) {
+              selectedVoice = voices.find(v => (v.lang.startsWith('en') && (v.name.includes('Natural') || v.name.includes('Google') || v.name.includes('Zira') || v.name.includes('David') || v.default))) || voices.find(v => v.lang.startsWith('en')) || voices[0];
+            }
           }
 
           if (selectedVoice) {
             utterance.voice = selectedVoice;
+            utterance.lang = selectedVoice.lang || 'en-US';
+          } else {
+            // NEVER set unsupported lang code if no matching voice exists
+            utterance.lang = 'en-US';
           }
 
           utterance.rate = 0.95;
@@ -4329,17 +4334,18 @@
           utterance.onstart = () => { didSpeak = true; };
           utterance.onend = () => { resetTtsButtonState(); };
           utterance.onerror = (err) => {
-            console.warn('SpeechSynthesis error, triggering audio fallback:', err);
+            console.warn('SpeechSynthesis error, switching to neural audio stream:', err);
             resetTtsButtonState();
-            playOnlineTtsFallback(cleanText, isUrduScript ? 'ur' : (isRomanUrdu ? 'hi' : 'en'), btnEl);
+            playOnlineTtsFallback(cleanText, isUrduScript || isRomanUrdu ? 'Aditi' : 'Brian', btnEl);
           };
 
+          try { window.speechSynthesis.resume(); } catch(e) {}
           window.speechSynthesis.speak(utterance);
 
-          // Safety check: if SpeechSynthesis fails silently, fallback to audio stream
+          // Safety check: if SpeechSynthesis fails silently and does not start within 1.2s, play neural audio stream
           setTimeout(() => {
             if (!didSpeak && !window.speechSynthesis.speaking && activeTtsButton === btnEl) {
-              playOnlineTtsFallback(cleanText, isUrduScript ? 'ur' : (isRomanUrdu ? 'hi' : 'en'), btnEl);
+              playOnlineTtsFallback(cleanText, isUrduScript || isRomanUrdu ? 'Aditi' : 'Brian', btnEl);
             }
           }, 1200);
 
@@ -4349,24 +4355,25 @@
         }
       }
 
-      // 2. Direct Fallback via Google TTS Audio Stream
-      playOnlineTtsFallback(cleanText, isUrduScript ? 'ur' : (isRomanUrdu ? 'hi' : 'en'), btnEl);
+      // Fallback directly to high quality neural voice stream
+      playOnlineTtsFallback(cleanText, isUrduScript || isRomanUrdu ? 'Aditi' : 'Brian', btnEl);
     };
 
-    function playOnlineTtsFallback(text, langCode, btnEl) {
+    function playOnlineTtsFallback(text, voiceName, btnEl) {
       try {
         if (btnEl) {
           activeTtsButton = btnEl;
           btnEl.classList.add('tts-speaking');
         }
-        const encoded = encodeURIComponent(text.substring(0, 180));
-        const audioUrl = `https://translate.google.com/translate_tts?ie=UTF-8&tl=${langCode}&client=tw-ob&q=${encoded}`;
+        const encoded = encodeURIComponent(text.substring(0, 200));
+        // StreamElements Neural TTS (CORS enabled, highly reliable, authentic accents)
+        const audioUrl = `https://api.streamelements.com/kappa/v2/speech?voice=${voiceName || 'Aditi'}&text=${encoded}`;
         const audio = new Audio(audioUrl);
         window._currentTtsAudio = audio;
         audio.onended = () => resetTtsButtonState();
         audio.onerror = () => resetTtsButtonState();
         audio.play().catch(e => {
-          console.warn('Fallback audio error:', e);
+          console.warn('Audio play error:', e);
           resetTtsButtonState();
         });
       } catch(e) {

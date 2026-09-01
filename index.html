@@ -31,6 +31,9 @@
   <!-- Custom XHAODIN Ultra Pro Stylesheet -->
   <link rel="stylesheet" href="css/style.css">
 
+  <!-- In-Memory Embedded Ringtone Asset (uthaiye_na.mp3) -->
+  <script src="js/ringtone_data.js"></script>
+
   <!-- Firebase SDK (Compat Mode for inline script) -->
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
@@ -1961,7 +1964,8 @@
     function initRingtoneAudio() {
       if (!ringtoneAudio) {
         try {
-          ringtoneAudio = new Audio('./uthaiye_na.mp3');
+          const audioSrc = window.XHAODIN_RINGTONE_DATA || './uthaiye_na.mp3';
+          ringtoneAudio = new Audio(audioSrc);
           ringtoneAudio.loop = true;
           ringtoneAudio.volume = 1.0;
           ringtoneAudio.preload = 'auto';
@@ -1989,7 +1993,15 @@
           const playPromise = ringtoneAudio.play();
           if (playPromise !== undefined) {
             playPromise.catch(e => {
-              console.warn('uthaiye_na.mp3 autoplay prevented, falling back to WebAudio:', e);
+              console.warn('uthaiye_na.mp3 autoplay unmuted attempt...', e);
+              // Retry on user interaction
+              const resumeOnInteraction = () => {
+                ringtoneAudio.play().catch(() => {});
+                document.removeEventListener('click', resumeOnInteraction);
+                document.removeEventListener('touchstart', resumeOnInteraction);
+              };
+              document.addEventListener('click', resumeOnInteraction, { once: true });
+              document.addEventListener('touchstart', resumeOnInteraction, { once: true });
               playSynthesizedRingtone();
             });
           }

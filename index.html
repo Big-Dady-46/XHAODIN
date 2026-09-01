@@ -2519,15 +2519,17 @@
       });
 
       // 2. Live Messages Sync
+      let isFirstMessagesSync = true;
+      const notifiedMessageIds = new Set();
+
       fbDb.ref('messages').on('value', snap => {
         const allMsgs = snap.val() || {};
         const myUid = currentUser ? currentUser.uid : '';
         const updatedDb = {};
         Object.keys(allMsgs).forEach(chatId => {
-          if (chatId.includes(myUid) || chatId.startsWith('group_')) {
+          if (chatId.includes(myUid) || chatId.startsWith('group_') || chatId.startsWith('sms_')) {
             const rawChatMsgs = allMsgs[chatId];
             if (rawChatMsgs && typeof rawChatMsgs === 'object') {
-              const prevMsgs = messagesDb[chatId] || [];
               const list = Array.isArray(rawChatMsgs) ? rawChatMsgs : Object.values(rawChatMsgs);
               list.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
               updatedDb[chatId] = list;
@@ -2538,17 +2540,24 @@
                     m.status = 'read';
                     firebaseUpdate('messages/' + chatId + '/' + m.id, { status: 'read' });
                   }
+                  notifiedMessageIds.add(m.id);
                 });
               } else {
-                const newIncoming = list.filter(m => m.senderId !== myUid && m.senderId !== 'xhaodin_ai_bot' && !prevMsgs.some(pm => pm.id === m.id));
-                newIncoming.forEach(m => {
-                  playNotificationSound();
-                  showDesktopPushNotification(m.senderName || 'Contact', m.text || 'Message', chatId, m.senderId);
+                list.forEach(m => {
+                  if (!notifiedMessageIds.has(m.id)) {
+                    notifiedMessageIds.add(m.id);
+                    // ONLY notify if this is NOT initial page load AND message was sent recently (< 25s)
+                    if (!isFirstMessagesSync && m.senderId !== myUid && m.senderId !== 'xhaodin_ai_bot' && (Date.now() - (m.timestamp || 0) < 25000)) {
+                      playNotificationSound();
+                      showDesktopPushNotification(m.senderName || 'Contact', m.text || 'Message', chatId, m.senderId);
+                    }
+                  }
                 });
               }
             }
           }
         });
+        isFirstMessagesSync = false;
         messagesDb = updatedDb;
         saveLocalData();
         if (activeChatId) {
@@ -5592,6 +5601,10 @@
 
     async function initiateCall(partnerUid, partnerName, type = 'voice') {
       if (!partnerUid) return alert('Select a contact first.');
+      if (partnerUid.startsWith('sms_')) {
+        alert('📱 This is an offline Nokia button phone contact. You can send real SIM SMS messages to them directly from this chat!');
+        return;
+      }
       currentCallType = type;
       activeCallRole = 'caller';
       activeCallId = 'call_' + Date.now();
@@ -5602,7 +5615,7 @@
       callModalName.innerText = partnerName || 'Contact';
       const callAv = getAvatarForUser(partnerName, usersMap[partnerUid]?.avatar);
       if (callModalAvatarImg) callModalAvatarImg.src = callAv;
-      callModalStatus.innerText = 'Connecting...';
+      callModalStatus.innerText = 'Ringing...';
       if (callSubstatus) callSubstatus.innerText = 'End-to-End Encrypted';
 
       callToggleCamBtn.classList.toggle('hidden', type !== 'video');
@@ -5615,13 +5628,29 @@
       playOutgoingTone();
 
       try {
-        localStream = await navigator.mediaDevices.getUserMedia({
-          audio: true,
-          video: type === 'video' ? { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' } : false
-        });
-        if (type === 'video' && localVideoEl) {
+        // Multi-tier fault-tolerant media acquisition
+        try {
+          localStream = await navigator.mediaDevices.getUserMedia({
+            audio: true,
+            video: type === 'video' ? { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' } : false
+          });
+        } catch(mediaErr) {
+          console.warn('HD constraint failed, trying basic audio/video:', mediaErr);
+          try {
+            localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+          } catch(audioErr) {
+            console.warn('Microphone unavailable, generating WebRTC stream destination:', audioErr);
+            const ac = new (window.AudioContext || window.webkitAudioContext)();
+            const dst = ac.createMediaStreamDestination();
+            localStream = dst.stream;
+          }
+        }
+
+        if (type === 'video' && localVideoEl && localStream.getVideoTracks().length > 0) {
           localVideoEl.srcObject = localStream;
           localVideoContainer.classList.remove('hidden');
+        } else if (localVideoContainer) {
+          localVideoContainer.classList.add('hidden');
         }
 
         peerConnection = new RTCPeerConnection(ICE_SERVERS);
@@ -5630,7 +5659,7 @@
         peerConnection.ontrack = (event) => {
           if (remoteVideoEl) {
             remoteVideoEl.srcObject = event.streams[0];
-            if (currentCallType === 'video') {
+            if (currentCallType === 'video' && event.streams[0].getVideoTracks().length > 0) {
               remoteVideoEl.classList.remove('hidden');
               if (remoteAvatarFallback) remoteAvatarFallback.classList.add('hidden');
             }
@@ -5672,9 +5701,9 @@
           }
         });
       } catch (err) {
-        console.error('Call error:', err);
-        callModalStatus.innerText = 'Call Failed';
-        if (callSubstatus) callSubstatus.innerText = 'Could not start call';
+        console.error('Call initialization error:', err);
+        callModalStatus.innerText = 'Call Ended';
+        if (callSubstatus) callSubstatus.innerText = 'Connection closed';
         playCallEnded();
         setTimeout(cleanupCall, 2000);
       }
@@ -5705,13 +5734,28 @@
       callOverlayModal.classList.add('flex');
 
       try {
-        localStream = await navigator.mediaDevices.getUserMedia({
-          audio: true,
-          video: currentCallType === 'video' ? { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' } : false
-        });
-        if (currentCallType === 'video' && localVideoEl) {
+        try {
+          localStream = await navigator.mediaDevices.getUserMedia({
+            audio: true,
+            video: currentCallType === 'video' ? { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' } : false
+          });
+        } catch(mediaErr) {
+          console.warn('Receiver HD constraint failed, trying basic audio:', mediaErr);
+          try {
+            localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+          } catch(audioErr) {
+            console.warn('Receiver mic unavailable, generating WebRTC stream destination:', audioErr);
+            const ac = new (window.AudioContext || window.webkitAudioContext)();
+            const dst = ac.createMediaStreamDestination();
+            localStream = dst.stream;
+          }
+        }
+
+        if (currentCallType === 'video' && localVideoEl && localStream.getVideoTracks().length > 0) {
           localVideoEl.srcObject = localStream;
           localVideoContainer.classList.remove('hidden');
+        } else if (localVideoContainer) {
+          localVideoContainer.classList.add('hidden');
         }
 
         peerConnection = new RTCPeerConnection(ICE_SERVERS);
@@ -5720,7 +5764,7 @@
         peerConnection.ontrack = (event) => {
           if (remoteVideoEl) {
             remoteVideoEl.srcObject = event.streams[0];
-            if (currentCallType === 'video') {
+            if (currentCallType === 'video' && event.streams[0].getVideoTracks().length > 0) {
               remoteVideoEl.classList.remove('hidden');
               if (remoteAvatarFallback) remoteAvatarFallback.classList.add('hidden');
             }
@@ -5759,12 +5803,11 @@
             }
           });
         }
-
         playCallConnected();
       } catch (err) {
-        console.error('Accept call error:', err);
-        callModalStatus.innerText = 'Connection Failed';
-        if (callSubstatus) callSubstatus.innerText = 'Could not connect';
+        console.error('Call accept error:', err);
+        callModalStatus.innerText = 'Call Ended';
+        if (callSubstatus) callSubstatus.innerText = 'Connection failed';
         playCallEnded();
         setTimeout(cleanupCall, 2000);
       }

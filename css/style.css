@@ -278,6 +278,32 @@ body {
 .tick-blue { color: var(--wa-tick-blue) !important; }
 .tick-gray { color: var(--wa-text-dimmed) !important; }
 
+/* Futuristic Floating & Rotating Logo Animations */
+@keyframes cyberRing {
+  0% { transform: rotate(0deg) scale(1); }
+  50% { transform: rotate(180deg) scale(1.04); }
+  100% { transform: rotate(360deg) scale(1); }
+}
+
+@keyframes xhaodinFloatGlow {
+  0%, 100% {
+    transform: translateY(0px) rotate(0deg);
+    box-shadow: 0 0 35px rgba(0, 229, 153, 0.4), 0 0 70px rgba(0, 229, 153, 0.2);
+  }
+  50% {
+    transform: translateY(-9px) rotate(1.5deg);
+    box-shadow: 0 0 55px rgba(0, 229, 153, 0.65), 0 0 95px rgba(56, 189, 248, 0.35);
+  }
+}
+
+.animate-cyber-ring {
+  animation: cyberRing 14s linear infinite;
+}
+
+.animate-xhaodin-glow {
+  animation: xhaodinFloatGlow 3.5s ease-in-out infinite;
+}
+
 .filter-chip {
   padding: 6px 16px;
   border-radius: 9999px;

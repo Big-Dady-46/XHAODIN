@@ -1263,6 +1263,7 @@
       <!-- 1. Remote Video Screen (Main View) -->
       <div id="remoteVideoWrapper" class="absolute inset-0 w-full h-full flex items-center justify-center overflow-hidden z-0 bg-transparent">
         <video id="remoteVideoEl" autoplay playsinline class="w-full h-full object-cover hidden rounded-none"></video>
+        <audio id="remoteAudioEl" autoplay playsinline></audio>
         
         <!-- Remote Avatar Fallback (when video is off/audio call) -->
         <div id="remoteAvatarFallback" class="flex flex-col items-center justify-center my-auto z-10 animate-fade-in">
@@ -1925,6 +1926,7 @@
     // Call Overlay Elements
     const callOverlayModal = document.getElementById('callOverlayModal');
     const remoteVideoEl = document.getElementById('remoteVideoEl');
+    const remoteAudioEl = document.getElementById('remoteAudioEl');
     const remoteAvatarFallback = document.getElementById('remoteAvatarFallback');
     const localVideoEl = document.getElementById('localVideoEl');
     const localVideoContainer = document.getElementById('localVideoContainer');
@@ -2810,6 +2812,8 @@
       }
     }
 
+    let queuedIceCandidates = [];
+
     function handleCallSignal(data) {
       const { signalType, callData } = data;
       if (currentUser && callData) {
@@ -2818,6 +2822,7 @@
             activeCallId = callData.callId;
             currentCallData = callData;
             currentCallType = callData.callType || 'voice';
+            queuedIceCandidates = [];
 
             incomingCallerName.innerText = callData.callerName || 'Contact';
             const callAvUrl = getAvatarForUser(callData.callerName, usersMap[callData.callerUid]?.avatar);
@@ -2847,9 +2852,31 @@
             peerConnection.setRemoteDescription(new RTCSessionDescription(callData.answer)).then(() => {
               stopCallSounds();
               playCallConnected();
-            }).catch(() => {});
-          } else if (signalType === 'ICE_CANDIDATE' && callData.candidate && peerConnection) {
-            peerConnection.addIceCandidate(new RTCIceCandidate(callData.candidate)).catch(() => {});
+              if (queuedIceCandidates.length > 0) {
+                queuedIceCandidates.forEach(cand => {
+                  peerConnection.addIceCandidate(new RTCIceCandidate(cand)).catch(() => {});
+                });
+                queuedIceCandidates = [];
+              }
+            }).catch(e => console.warn('setRemoteDescription answer error:', e));
+          } else if (signalType === 'ICE_CANDIDATE' && callData.candidate) {
+            if (peerConnection && peerConnection.remoteDescription && peerConnection.remoteDescription.type) {
+              peerConnection.addIceCandidate(new RTCIceCandidate(callData.candidate)).catch(e => console.warn('ICE add error:', e));
+            } else {
+              queuedIceCandidates.push(callData.candidate);
+            }
+          } else if (signalType === 'RENEGOTIATE_OFFER' && callData.offer && peerConnection) {
+            peerConnection.setRemoteDescription(new RTCSessionDescription(callData.offer)).then(async () => {
+              const answer = await peerConnection.createAnswer();
+              await peerConnection.setLocalDescription(answer);
+              sendWS('CALL_SIGNAL', {
+                targetUid: callData.callerUid,
+                signalType: 'RENEGOTIATE_ANSWER',
+                callData: { callId: activeCallId, answer: { sdp: answer.sdp, type: answer.type } }
+              });
+            }).catch(e => console.warn('Renegotiate offer error:', e));
+          } else if (signalType === 'RENEGOTIATE_ANSWER' && callData.answer && peerConnection) {
+            peerConnection.setRemoteDescription(new RTCSessionDescription(callData.answer)).catch(e => console.warn('Renegotiate answer error:', e));
           } else if (signalType === 'END') {
             callModalStatus.innerText = 'Call Ended';
             if (callSubstatus) callSubstatus.innerText = 'Call has ended';
@@ -5569,14 +5596,18 @@
     document.getElementById('drawerActionAddSmsContact')?.addEventListener('click', openSmsContactModal);
 
     // ----------------------------------------------------------------------
-    // 16. WebRTC Voice & Video Calling (Real PeerConnection + Screen Share)
+    // 16. WebRTC Voice & Video Calling & Screen Share Engine
     // ----------------------------------------------------------------------
     const ICE_SERVERS = {
       iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
         { urls: 'stun:stun1.l.google.com:19302' },
-        { urls: 'stun:stun2.l.google.com:19302' }
-      ]
+        { urls: 'stun:stun2.l.google.com:19302' },
+        { urls: 'stun:stun3.l.google.com:19302' },
+        { urls: 'stun:stun4.l.google.com:19302' },
+        { urls: 'stun:global.stun.twilio.com:3478' }
+      ],
+      iceCandidatePoolSize: 10
     };
 
     let localStream = null;
@@ -5599,6 +5630,62 @@
       if (activePartnerUid) initiateCall(activePartnerUid, activeChatTitle.innerText, 'voice');
     });
 
+    function setupPeerConnectionListeners(targetUid) {
+      if (!peerConnection) return;
+
+      peerConnection.ontrack = (event) => {
+        console.log('WebRTC ontrack event received:', event.track.kind, event.streams);
+        let stream = event.streams && event.streams[0] ? event.streams[0] : null;
+        if (!stream) {
+          stream = new MediaStream();
+          stream.addTrack(event.track);
+        }
+
+        // 1. Crystal-Clear Audio Playback (Voice & Video Calls)
+        if (remoteAudioEl) {
+          remoteAudioEl.srcObject = stream;
+          remoteAudioEl.volume = 1.0;
+          remoteAudioEl.play().catch(err => console.warn('Remote audio autoplay blocked:', err));
+        }
+
+        // 2. Video Playback (Video Call & Screen Sharing)
+        if (remoteVideoEl) {
+          remoteVideoEl.srcObject = stream;
+          remoteVideoEl.play().catch(err => console.warn('Remote video autoplay blocked:', err));
+        }
+
+        const hasVideo = stream.getVideoTracks().some(t => t.readyState === 'live' && t.enabled);
+        if (hasVideo || currentCallType === 'video' || isScreenSharing) {
+          if (remoteVideoEl) remoteVideoEl.classList.remove('hidden');
+          if (remoteAvatarFallback) remoteAvatarFallback.classList.add('hidden');
+        } else {
+          if (remoteVideoEl) remoteVideoEl.classList.add('hidden');
+          if (remoteAvatarFallback) remoteAvatarFallback.classList.remove('hidden');
+        }
+      };
+
+      peerConnection.onicecandidate = (event) => {
+        if (event.candidate && activeCallId && targetUid) {
+          sendWS('CALL_SIGNAL', {
+            targetUid: targetUid,
+            signalType: 'ICE_CANDIDATE',
+            callData: { callId: activeCallId, candidate: event.candidate.toJSON ? event.candidate.toJSON() : event.candidate }
+          });
+        }
+      };
+
+      peerConnection.onconnectionstatechange = () => {
+        console.log('WebRTC Connection State:', peerConnection.connectionState);
+        if (peerConnection.connectionState === 'connected') {
+          callModalStatus.innerText = '00:00';
+          if (callSubstatus) callSubstatus.innerText = 'Connected • HD Encrypted';
+          startCallTimer();
+        } else if (peerConnection.connectionState === 'disconnected' || peerConnection.connectionState === 'failed') {
+          callModalStatus.innerText = 'Reconnecting...';
+        }
+      };
+    }
+
     async function initiateCall(partnerUid, partnerName, type = 'voice') {
       if (!partnerUid) return alert('Select a contact first.');
       if (partnerUid.startsWith('sms_')) {
@@ -5620,18 +5707,18 @@
 
       callToggleCamBtn.classList.toggle('hidden', type !== 'video');
       callToggleCamBtn.classList.toggle('flex', type === 'video');
-      callToggleScreenShareBtn.classList.toggle('hidden', type !== 'video');
-      callToggleScreenShareBtn.classList.toggle('flex', type === 'video');
+      callToggleScreenShareBtn.classList.remove('hidden');
+      callToggleScreenShareBtn.classList.add('flex');
 
       callOverlayModal.classList.remove('hidden');
       callOverlayModal.classList.add('flex');
       playOutgoingTone();
 
       try {
-        // Multi-tier fault-tolerant media acquisition
+        // Multi-tier fault-tolerant media acquisition with High Definition Audio
         try {
           localStream = await navigator.mediaDevices.getUserMedia({
-            audio: true,
+            audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
             video: type === 'video' ? { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' } : false
           });
         } catch(mediaErr) {
@@ -5648,43 +5735,20 @@
 
         if (type === 'video' && localVideoEl && localStream.getVideoTracks().length > 0) {
           localVideoEl.srcObject = localStream;
-          localVideoContainer.classList.remove('hidden');
+          localVideoEl.play().catch(() => {});
+          if (localVideoContainer) localVideoContainer.classList.remove('hidden');
         } else if (localVideoContainer) {
           localVideoContainer.classList.add('hidden');
         }
 
         peerConnection = new RTCPeerConnection(ICE_SERVERS);
         localStream.getTracks().forEach(t => peerConnection.addTrack(t, localStream));
+        setupPeerConnectionListeners(partnerUid);
 
-        peerConnection.ontrack = (event) => {
-          if (remoteVideoEl) {
-            remoteVideoEl.srcObject = event.streams[0];
-            if (currentCallType === 'video' && event.streams[0].getVideoTracks().length > 0) {
-              remoteVideoEl.classList.remove('hidden');
-              if (remoteAvatarFallback) remoteAvatarFallback.classList.add('hidden');
-            }
-          }
-        };
-
-        peerConnection.onicecandidate = (event) => {
-          if (event.candidate && activeCallId) {
-            sendWS('CALL_SIGNAL', {
-              targetUid: partnerUid,
-              signalType: 'ICE_CANDIDATE',
-              callData: { callId: activeCallId, candidate: event.candidate.toJSON() }
-            });
-          }
-        };
-
-        peerConnection.onconnectionstatechange = () => {
-          if (peerConnection.connectionState === 'connected') {
-            callModalStatus.innerText = '00:00';
-            if (callSubstatus) callSubstatus.innerText = 'Connected';
-            startCallTimer();
-          }
-        };
-
-        const offer = await peerConnection.createOffer();
+        const offer = await peerConnection.createOffer({
+          offerToReceiveAudio: true,
+          offerToReceiveVideo: true
+        });
         await peerConnection.setLocalDescription(offer);
 
         sendWS('CALL_SIGNAL', {
@@ -5727,8 +5791,8 @@
 
       callToggleCamBtn.classList.toggle('hidden', currentCallType !== 'video');
       callToggleCamBtn.classList.toggle('flex', currentCallType === 'video');
-      callToggleScreenShareBtn.classList.toggle('hidden', currentCallType !== 'video');
-      callToggleScreenShareBtn.classList.toggle('flex', currentCallType === 'video');
+      callToggleScreenShareBtn.classList.remove('hidden');
+      callToggleScreenShareBtn.classList.add('flex');
 
       callOverlayModal.classList.remove('hidden');
       callOverlayModal.classList.add('flex');
@@ -5736,7 +5800,7 @@
       try {
         try {
           localStream = await navigator.mediaDevices.getUserMedia({
-            audio: true,
+            audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
             video: currentCallType === 'video' ? { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' } : false
           });
         } catch(mediaErr) {
@@ -5753,45 +5817,31 @@
 
         if (currentCallType === 'video' && localVideoEl && localStream.getVideoTracks().length > 0) {
           localVideoEl.srcObject = localStream;
-          localVideoContainer.classList.remove('hidden');
+          localVideoEl.play().catch(() => {});
+          if (localVideoContainer) localVideoContainer.classList.remove('hidden');
         } else if (localVideoContainer) {
           localVideoContainer.classList.add('hidden');
         }
 
         peerConnection = new RTCPeerConnection(ICE_SERVERS);
         localStream.getTracks().forEach(t => peerConnection.addTrack(t, localStream));
-
-        peerConnection.ontrack = (event) => {
-          if (remoteVideoEl) {
-            remoteVideoEl.srcObject = event.streams[0];
-            if (currentCallType === 'video' && event.streams[0].getVideoTracks().length > 0) {
-              remoteVideoEl.classList.remove('hidden');
-              if (remoteAvatarFallback) remoteAvatarFallback.classList.add('hidden');
-            }
-          }
-        };
-
-        peerConnection.onicecandidate = (event) => {
-          if (event.candidate && activeCallId) {
-            sendWS('CALL_SIGNAL', {
-              targetUid: currentCallData.callerUid,
-              signalType: 'ICE_CANDIDATE',
-              callData: { callId: activeCallId, candidate: event.candidate.toJSON() }
-            });
-          }
-        };
-
-        peerConnection.onconnectionstatechange = () => {
-          if (peerConnection.connectionState === 'connected') {
-            callModalStatus.innerText = '00:00';
-            if (callSubstatus) callSubstatus.innerText = 'Connected';
-            startCallTimer();
-          }
-        };
+        setupPeerConnectionListeners(currentCallData.callerUid);
 
         if (currentCallData.offer) {
           await peerConnection.setRemoteDescription(new RTCSessionDescription(currentCallData.offer));
-          const answer = await peerConnection.createAnswer();
+          
+          // Flush any early ICE candidates
+          if (queuedIceCandidates && queuedIceCandidates.length > 0) {
+            queuedIceCandidates.forEach(cand => {
+              peerConnection.addIceCandidate(new RTCIceCandidate(cand)).catch(() => {});
+            });
+            queuedIceCandidates = [];
+          }
+
+          const answer = await peerConnection.createAnswer({
+            offerToReceiveAudio: true,
+            offerToReceiveVideo: true
+          });
           await peerConnection.setLocalDescription(answer);
 
           sendWS('CALL_SIGNAL', {
@@ -5831,9 +5881,10 @@
     callEndBtn.addEventListener('click', () => {
       stopCallSounds();
       playCallEnded();
-      if (activePartnerUid) {
+      const targetUid = activeCallRole === 'caller' ? activePartnerUid : currentCallData?.callerUid;
+      if (targetUid) {
         sendWS('CALL_SIGNAL', {
-          targetUid: activePartnerUid,
+          targetUid: targetUid,
           signalType: 'END',
           callData: { callId: activeCallId }
         });
@@ -5848,6 +5899,7 @@
           isMicMuted = !isMicMuted;
           audioTracks[0].enabled = !isMicMuted;
           callToggleMicBtn.classList.toggle('muted', isMicMuted);
+          callToggleMicBtn.title = isMicMuted ? 'Unmute Microphone' : 'Mute Microphone';
         }
       }
     });
@@ -5859,6 +5911,7 @@
           isCamDisabled = !isCamDisabled;
           videoTracks[0].enabled = !isCamDisabled;
           callToggleCamBtn.classList.toggle('muted', isCamDisabled);
+          callToggleCamBtn.title = isCamDisabled ? 'Turn Camera On' : 'Turn Camera Off';
         }
       }
     });
@@ -5866,44 +5919,73 @@
     callToggleScreenShareBtn.addEventListener('click', async () => {
       try {
         if (!isScreenSharing) {
-          screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+          screenStream = await navigator.mediaDevices.getDisplayMedia({
+            video: { cursor: 'always' },
+            audio: false
+          });
           const screenTrack = screenStream.getVideoTracks()[0];
 
-          if (peerConnection && localStream) {
-            const sender = peerConnection.getSenders().find(s => s.track && s.track.kind === 'video');
-            if (sender) {
-              await sender.replaceTrack(screenTrack);
+          if (peerConnection) {
+            const videoSender = peerConnection.getSenders().find(s => s.track && s.track.kind === 'video');
+            if (videoSender) {
+              await videoSender.replaceTrack(screenTrack);
+            } else {
+              peerConnection.addTrack(screenTrack, screenStream);
+              const offer = await peerConnection.createOffer();
+              await peerConnection.setLocalDescription(offer);
+              const targetUid = activeCallRole === 'caller' ? activePartnerUid : currentCallData?.callerUid;
+              if (targetUid) {
+                sendWS('CALL_SIGNAL', {
+                  targetUid: targetUid,
+                  signalType: 'RENEGOTIATE_OFFER',
+                  callData: { callId: activeCallId, callerUid: currentUser?.uid, offer: { sdp: offer.sdp, type: offer.type } }
+                });
+              }
             }
           }
-          if (localVideoEl) localVideoEl.srcObject = screenStream;
+
+          if (localVideoEl) {
+            localVideoEl.srcObject = screenStream;
+            localVideoEl.play().catch(() => {});
+            if (localVideoContainer) localVideoContainer.classList.remove('hidden');
+          }
+
           isScreenSharing = true;
           callToggleScreenShareBtn.classList.add('muted');
+          callToggleScreenShareBtn.title = 'Stop Sharing Screen';
 
           screenTrack.onended = () => { stopScreenShare(); };
         } else {
           stopScreenShare();
         }
       } catch (err) {
+        console.warn('Screen share error:', err);
         stopScreenShare();
       }
     });
 
-    function stopScreenShare() {
+    async function stopScreenShare() {
       if (screenStream) {
         screenStream.getTracks().forEach(t => t.stop());
         screenStream = null;
       }
       isScreenSharing = false;
       callToggleScreenShareBtn.classList.remove('muted');
+      callToggleScreenShareBtn.title = 'Share Screen';
+
       if (peerConnection && localStream) {
-        const camTrack = localStream.getVideoTracks()[0];
-        if (camTrack) {
-          const sender = peerConnection.getSenders().find(s => s.track && s.track.kind === 'video');
-          if (sender) sender.replaceTrack(camTrack);
+        const camTrack = localStream.getVideoTracks()[0] || null;
+        const videoSender = peerConnection.getSenders().find(s => s.track && s.track.kind === 'video');
+        if (videoSender && camTrack) {
+          await videoSender.replaceTrack(camTrack);
         }
       }
       if (localStream && localVideoEl) {
         localVideoEl.srcObject = localStream;
+        localVideoEl.play().catch(() => {});
+        if (currentCallType !== 'video' && localVideoContainer) {
+          localVideoContainer.classList.add('hidden');
+        }
       }
     }
 
@@ -5928,8 +6010,9 @@
       }
       if (localVideoEl) localVideoEl.srcObject = null;
       if (remoteVideoEl) remoteVideoEl.srcObject = null;
-      localVideoContainer.classList.add('hidden');
-      remoteVideoEl.classList.add('hidden');
+      if (remoteAudioEl) remoteAudioEl.srcObject = null;
+      if (localVideoContainer) localVideoContainer.classList.add('hidden');
+      if (remoteVideoEl) remoteVideoEl.classList.add('hidden');
       if (remoteAvatarFallback) remoteAvatarFallback.classList.remove('hidden');
       callOverlayModal.classList.add('hidden');
       callOverlayModal.classList.remove('flex');

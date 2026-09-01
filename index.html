@@ -1099,6 +1099,10 @@
             <span>📡</span>
             <span>SMS Gateway & Webhook Setup</span>
           </button>
+          <button type="button" id="testRingtoneBtn" onclick="toggleTestRingtone(this)" class="w-full py-3 rounded-2xl bg-[#10191f] border border-white/10 text-[#f8fafc] font-medium text-xs transition hover:bg-white/5 active:scale-[0.98] flex items-center justify-center gap-2">
+            <span>🔔</span>
+            <span>Test Ringtone (Uthaiye Na)</span>
+          </button>
         </div>
 
       </div>
@@ -1952,29 +1956,59 @@
     let ringtoneInterval = null;
     let ringtoneAudio = null;
 
+    function initRingtoneAudio() {
+      if (!ringtoneAudio) {
+        try {
+          ringtoneAudio = new Audio('./uthaiye_na.mp3');
+          ringtoneAudio.loop = true;
+          ringtoneAudio.volume = 1.0;
+          ringtoneAudio.preload = 'auto';
+          ringtoneAudio.load();
+        } catch(e) {
+          console.warn('Ringtone init error:', e);
+        }
+      }
+    }
+
+    document.addEventListener('click', () => { initRingtoneAudio(); }, { once: true });
+    document.addEventListener('touchstart', () => { initRingtoneAudio(); }, { once: true });
+
     // ----------------------------------------------------------------------
-    // Audio Engine & Sound Synthesizer
+    // Audio Engine & Sound Synthesizer (uthaiye_na.mp3 Ringtone)
     // ----------------------------------------------------------------------
     function playRingtone() {
       stopCallSounds();
       if (!soundEnabled) return;
       try {
-        if (!ringtoneAudio) {
-          ringtoneAudio = new Audio('/uthaiye_na.mp3');
-          ringtoneAudio.loop = true;
-        }
-        ringtoneAudio.currentTime = 0;
-        const playPromise = ringtoneAudio.play();
-        if (playPromise !== undefined) {
-          playPromise.catch(e => {
-            console.warn('Custom ringtone autoplay prevented, falling back to WebAudio:', e);
-            playSynthesizedRingtone();
-          });
+        initRingtoneAudio();
+        if (ringtoneAudio) {
+          ringtoneAudio.currentTime = 0;
+          ringtoneAudio.volume = 1.0;
+          const playPromise = ringtoneAudio.play();
+          if (playPromise !== undefined) {
+            playPromise.catch(e => {
+              console.warn('uthaiye_na.mp3 autoplay prevented, falling back to WebAudio:', e);
+              playSynthesizedRingtone();
+            });
+          }
+        } else {
+          playSynthesizedRingtone();
         }
       } catch (e) {
+        console.warn('Ringtone error:', e);
         playSynthesizedRingtone();
       }
     }
+
+    window.toggleTestRingtone = function(btnEl) {
+      if (ringtoneAudio && !ringtoneAudio.paused) {
+        stopCallSounds();
+        if (btnEl) btnEl.innerHTML = '<span>🔔</span><span>Test Ringtone (Uthaiye Na)</span>';
+      } else {
+        playRingtone();
+        if (btnEl) btnEl.innerHTML = '<span>⏹️</span><span>Stop Ringtone</span>';
+      }
+    };
 
     function playSynthesizedRingtone() {
       stopCallSounds();
@@ -2843,131 +2877,7 @@
       }
     });
 
-    // ----------------------------------------------------------------------
-    // 2. Audio Engine & Ringtone Generator
-    // ----------------------------------------------------------------------
-    function playNotificationSound() {
-      if (!soundEnabled) return;
-      try {
-        const AudioCtxClass = window.AudioContext || window.webkitAudioContext;
-        if (!AudioCtxClass) return;
-        const ctx = new AudioCtxClass();
-        if (ctx.state === 'suspended') {
-          ctx.resume().then(() => {
-            const osc = ctx.createOscillator();
-            const gain = ctx.createGain();
-            osc.frequency.setValueAtTime(880, ctx.currentTime);
-            osc.frequency.exponentialRampToValueAtTime(1318.5, ctx.currentTime + 0.12);
-            gain.gain.setValueAtTime(0.15, ctx.currentTime);
-            gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.28);
-            osc.connect(gain);
-            gain.connect(ctx.destination);
-            osc.start();
-            osc.stop(ctx.currentTime + 0.3);
-          }).catch(() => {});
-          return;
-        }
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.frequency.setValueAtTime(880, ctx.currentTime);
-        osc.frequency.exponentialRampToValueAtTime(1318.5, ctx.currentTime + 0.12);
-        gain.gain.setValueAtTime(0.15, ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.28);
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start();
-        osc.stop(ctx.currentTime + 0.3);
-      } catch (e) {}
-    }
 
-    function playRingtone() {
-      stopCallSounds();
-      if (!soundEnabled) return;
-      try {
-        if (!ringtoneAudio) {
-          ringtoneAudio = new Audio('/uthaiye_na.mp3');
-          ringtoneAudio.loop = true;
-        }
-        ringtoneAudio.currentTime = 0;
-        const playPromise = ringtoneAudio.play();
-        if (playPromise !== undefined) {
-          playPromise.catch(e => {
-            console.warn('Custom ringtone autoplay prevented, falling back to WebAudio:', e);
-            playSynthesizedRingtone();
-          });
-        }
-      } catch (e) {
-        playSynthesizedRingtone();
-      }
-    }
-
-    function playOutgoingTone() {
-      stopCallSounds();
-      if (!soundEnabled) return;
-      function dial() {
-        try {
-          const ctx = new (window.AudioContext || window.webkitAudioContext)();
-          const osc = ctx.createOscillator();
-          const gain = ctx.createGain();
-          osc.frequency.value = 425;
-          gain.gain.setValueAtTime(0.08, ctx.currentTime);
-          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.8);
-          osc.connect(gain);
-          gain.connect(ctx.destination);
-          osc.start();
-          osc.stop(ctx.currentTime + 0.8);
-        } catch (e) {}
-      }
-      dial();
-      ringtoneInterval = setInterval(dial, 2500);
-    }
-
-    function playCallConnected() {
-      stopCallSounds();
-      if (!soundEnabled) return;
-      try {
-        const ctx = new (window.AudioContext || window.webkitAudioContext)();
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.frequency.setValueAtTime(523.25, ctx.currentTime);
-        gain.gain.setValueAtTime(0.1, ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start();
-        osc.stop(ctx.currentTime + 0.35);
-      } catch (e) {}
-    }
-
-    function playCallEnded() {
-      stopCallSounds();
-      if (!soundEnabled) return;
-      try {
-        const ctx = new (window.AudioContext || window.webkitAudioContext)();
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.frequency.setValueAtTime(480, ctx.currentTime);
-        gain.gain.setValueAtTime(0.12, ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start();
-        osc.stop(ctx.currentTime + 0.35);
-      } catch (e) {}
-    }
-
-    function stopCallSounds() {
-      if (ringtoneAudio) {
-        try {
-          ringtoneAudio.pause();
-          ringtoneAudio.currentTime = 0;
-        } catch (e) {}
-      }
-      if (ringtoneInterval) {
-        clearInterval(ringtoneInterval);
-        ringtoneInterval = null;
-      }
-    }
 
     // ----------------------------------------------------------------------
     // 3. User Authentication & Profile

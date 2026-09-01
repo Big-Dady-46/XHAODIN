@@ -4266,7 +4266,7 @@
 
     // ----------------------------------------------------------------------
     // Smart Multilingual Text-to-Speech (TTS) Engine
-    // Supports Roman Urdu, Urdu (Arabic script), Hindi & English
+    // Supports Roman Punjabi, Roman Urdu, Urdu Script & English (Female Voice Only)
     // ----------------------------------------------------------------------
     let currentTtsUtterance = null;
     let activeTtsButton = null;
@@ -4275,7 +4275,68 @@
       if (!text) return '';
       let res = text;
       const dict = {
+        // Punjabi expressions & phrases
+        '\\bki haal ae\\b': 'kee haal hai',
+        '\\bki hal ae\\b': 'kee haal hai',
+        '\\bki haal\\b': 'kee haal',
+        '\\bki hal\\b': 'kee haal',
+        '\\bkiven ho\\b': 'keeven ho',
+        '\\bkive ho\\b': 'keeven ho',
+        '\\bkiven\\b': 'keeven',
+        '\\bkive\\b': 'keeven',
+        '\\bkiddan\\b': 'kiddaan',
+        '\\bkidaan\\b': 'kiddaan',
+        '\\bpaaji\\b': 'paaji',
+        '\\bpaji\\b': 'paaji',
+        '\\bbhaji\\b': 'bhaaji',
+        '\\bveere\\b': 'veere',
+        '\\bveer\\b': 'veer',
+        '\\btussi\\b': 'tussi',
+        '\\btusi\\b': 'tussi',
+        '\\bsaada\\b': 'saada',
+        '\\bsaade\\b': 'saaday',
+        '\\btwaada\\b': 'tuhaada',
+        '\\btwada\\b': 'tuhaada',
+        '\\bthwada\\b': 'tuhaada',
+        '\\bchanga\\b': 'changaa',
+        '\\bchange\\b': 'changay',
+        '\\bchangi\\b': 'changee',
+        '\\bsohna\\b': 'sohnaa',
+        '\\bsohni\\b': 'sohnee',
+        '\\bsohne\\b': 'sohnay',
+        '\\bkithy\\b': 'kithay',
+        '\\bkithe\\b': 'kithay',
+        '\\bjithe\\b': 'jithay',
+        '\\bjithy\\b': 'jithay',
+        '\\baaho\\b': 'aaho',
+        '\\baho\\b': 'aaho',
+        '\\bgall\\b': 'gaal',
+        '\\bgal\\b': 'gaal',
+        '\\bdasso\\b': 'dasso',
+        '\\bdaso\\b': 'dasso',
+        '\\bvadia\\b': 'vadiya',
+        '\\bvadiya\\b': 'vadiya',
+        '\\bhor\\b': 'hor',
+        '\\brab rakha\\b': 'rabb raakhaa',
+        '\\bkar reha\\b': 'kar rehaa',
+        '\\bkr reha\\b': 'kar rehaa',
+        '\\bkar rehi\\b': 'kar rahee',
+        '\\bkr rehi\\b': 'kar rahee',
+        '\\bkr rha\\b': 'kar rahaa',
+        '\\bkr rhi\\b': 'kar rahee',
+        '\\bkr rhe\\b': 'kar rahay',
+        '\\bkar rahe\\b': 'kar rahay',
+        '\\bkehna\\b': 'kehnaa',
+        '\\bkehnda\\b': 'kehndaa',
+        '\\bkehndi\\b': 'kehndee',
+        '\\bhove\\b': 'hovay',
+        '\\bhovay\\b': 'hovay',
+        '\\bchaliye\\b': 'chaliye',
+        '\\baao ji\\b': 'aao jee',
+
+        // Roman Urdu common words & shortcuts
         '\\bnhi\\b': 'nahi',
+        '\\bnai\\b': 'nahi',
         '\\bkese\\b': 'kaise',
         '\\bthik\\b': 'theek',
         '\\bkr\\b': 'kar',
@@ -4284,8 +4345,11 @@
         '\\brhe\\b': 'rahe',
         '\\baj\\b': 'aaj',
         '\\bbta\\b': 'batao',
+        '\\bbtao\\b': 'batao',
         '\\bbtaye\\b': 'bataiye',
         '\\bshukria\\b': 'shukriya',
+        '\\bshukriya\\b': 'shukriya',
+        '\\bmeharbani\\b': 'meherbaani',
         '\\bkia\\b': 'kya',
         '\\bmuje\\b': 'mujhe',
         '\\btm\\b': 'tum',
@@ -4293,7 +4357,8 @@
         '\\bkb\\b': 'kab',
         '\\bsb\\b': 'sab',
         '\\byr\\b': 'yaar',
-        '\\bby\\b': 'bye'
+        '\\bby\\b': 'bye',
+        '\\bae\\b': 'hai'
       };
       for (let pattern in dict) {
         res = res.replace(new RegExp(pattern, 'gi'), dict[pattern]);
@@ -4347,51 +4412,39 @@
 
       const isUrduScript = /[\u0600-\u06FF]/.test(cleanText);
 
-      // Normalize Roman Urdu phonetics for natural speech
+      // Normalize Roman Punjabi & Roman Urdu phonetics for natural speech
       const normalizedText = isUrduScript ? cleanText : normalizeRomanUrduPhonetics(cleanText);
 
-      // Common Roman Urdu keywords
-      const romanUrduWords = [
-        'kya', 'hai', 'hain', 'kaise', 'kese', 'karo', 'kar', 'karne', 'bhai', 'bhaiya', 
-        'mai', 'main', 'mera', 'meri', 'mere', 'tum', 'aap', 'apna', 'apni', 'theek', 
-        'thik', 'nahi', 'nhi', 'haan', 'aj', 'aaj', 'kal', 'sab', 'hoga', 'hogi', 
-        'batao', 'bataiye', 'suno', 'yar', 'yaar', 'accha', 'acha', 'shukriya', 'karna', 
-        'raha', 'rahi', 'rahe', 'gaya', 'gayi', 'aao', 'baat', 'bolo', 'sunao', 'shuru', 
-        'khatam', 'muje', 'mujhe', 'hum', 'woh', 'ye', 'yeh', 'wala', 'wali', 'wale',
-        'kuch', 'pehle', 'kharab', 'kaam', 'rha', 'rahe', 'sirf', 'shukria', 'kia', 'bye'
-      ];
-      const lowerClean = cleanText.toLowerCase();
-      const tokens = lowerClean.split(/[^a-z0-9]+/);
-      const isRomanUrdu = tokens.some(t => romanUrduWords.includes(t));
+      // Female Neural Voice: "Aditi" (Studio Quality South Asian Female Voice) or "Joanna" (English Female)
+      const isEnglishOnly = !isUrduScript && /^[a-zA-Z0-9\s.,!?'"()-]+$/.test(cleanText) && !/(haal|kiven|kiddan|paaji|veere|tussi|saada|twaada|changa|sohna|kithy|kithe|dasso|aaho|rha|rhi|rhe|nhi|theek|thik|bhai|yaar|kar|karo|batao|shukriya|mujhe|aaj|aao|gal|gall|vadia|hor|rab)/i.test(cleanText);
+      const femaleVoice = isEnglishOnly ? 'Joanna' : 'Aditi';
 
-      const voiceChoice = (isUrduScript || isRomanUrdu) ? 'Aditi' : 'Brian';
-
-      // 1. PRIMARY: Studio-Quality Neural Voice Stream (Flawless Pakistani/Indian & English pronunciation)
+      // 1. PRIMARY: High-Definition Neural Female Voice Stream (Aditi / Joanna)
       try {
         const encoded = encodeURIComponent(normalizedText.substring(0, 250));
-        const audioUrl = `https://api.streamelements.com/kappa/v2/speech?voice=${voiceChoice}&text=${encoded}`;
+        const audioUrl = `https://api.streamelements.com/kappa/v2/speech?voice=${femaleVoice}&text=${encoded}`;
         const audio = new Audio(audioUrl);
         window._currentTtsAudio = audio;
 
         audio.onended = () => resetTtsButtonState();
         audio.onerror = (err) => {
           console.warn('Neural audio stream failed, falling back to Web Speech Synthesis:', err);
-          fallbackToSpeechSynthesis(cleanText, isUrduScript, isRomanUrdu);
+          fallbackToSpeechSynthesis(normalizedText, isUrduScript);
         };
 
         const playPromise = audio.play();
         if (playPromise !== undefined) {
           playPromise.catch(err => {
             console.warn('Audio play prevented, using fallback:', err);
-            fallbackToSpeechSynthesis(cleanText, isUrduScript, isRomanUrdu);
+            fallbackToSpeechSynthesis(normalizedText, isUrduScript);
           });
         }
       } catch (err) {
-        fallbackToSpeechSynthesis(cleanText, isUrduScript, isRomanUrdu);
+        fallbackToSpeechSynthesis(normalizedText, isUrduScript);
       }
     };
 
-    function fallbackToSpeechSynthesis(text, isUrduScript, isRomanUrdu) {
+    function fallbackToSpeechSynthesis(text, isUrduScript) {
       if (!('speechSynthesis' in window)) {
         resetTtsButtonState();
         return;
@@ -4402,40 +4455,37 @@
         const utterance = new SpeechSynthesisUtterance(text);
         currentTtsUtterance = utterance;
         const voices = window.speechSynthesis.getVoices() || [];
+        
         let matchedVoice = null;
         if (voices.length > 0) {
-          if (isUrduScript) {
-            matchedVoice = voices.find(v => v.lang.startsWith('ur') || v.lang.includes('PK') || v.lang.startsWith('hi'));
-          } else if (isRomanUrdu) {
-            matchedVoice = voices.find(v => v.lang === 'hi-IN' || v.lang.startsWith('hi') || v.lang === 'ur-PK' || (v.name && v.name.toLowerCase().includes('india')));
-          }
-          if (!matchedVoice) {
-            matchedVoice = voices.find(v => (v.lang.startsWith('en') && (v.name.includes('Natural') || v.name.includes('Google') || v.default))) || voices[0];
+          // Select Female voices
+          const femaleVoices = voices.filter(v => {
+            const name = v.name.toLowerCase();
+            return name.includes('female') || name.includes('zira') || name.includes('aditi') || name.includes('raveena') || name.includes('heera') || name.includes('kalpana') || name.includes('swara') || name.includes('samantha') || name.includes('victoria') || name.includes('karen') || name.includes('salli') || name.includes('joanna');
+          });
+
+          if (femaleVoices.length > 0) {
+            matchedVoice = femaleVoices.find(v => v.lang.startsWith('hi') || v.lang.startsWith('ur') || v.lang === 'en-IN') || femaleVoices[0];
+          } else {
+            matchedVoice = voices.find(v => v.lang.startsWith('hi') || v.lang.startsWith('ur') || v.lang.startsWith('en')) || voices[0];
           }
         }
+
         if (matchedVoice) {
           utterance.voice = matchedVoice;
           utterance.lang = matchedVoice.lang || 'en-US';
         } else {
           utterance.lang = 'en-US';
         }
+
+        utterance.pitch = 1.15; // Slightly higher pitch for clear sweet female voice
         utterance.rate = 0.95;
-        utterance.pitch = 1.0;
         utterance.onend = () => resetTtsButtonState();
         utterance.onerror = () => resetTtsButtonState();
         window.speechSynthesis.speak(utterance);
       } catch(err) {
         resetTtsButtonState();
       }
-    }
-
-    function resetTtsButtonState() {
-      if (activeTtsButton) {
-        activeTtsButton.classList.remove('tts-speaking');
-        activeTtsButton.setAttribute('title', 'Listen / Read aloud');
-        activeTtsButton = null;
-      }
-      currentTtsUtterance = null;
     }
 
     function resetTtsButtonState() {

@@ -5655,13 +5655,69 @@
     let isMicMuted = false;
     let isCamDisabled = false;
     let isScreenSharing = false;
+    let callAudioCtx = null;
+    let callAudioSourceNode = null;
+
+    function unlockCallAudioContext() {
+      try {
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (!callAudioCtx || callAudioCtx.state === 'closed') {
+          callAudioCtx = new AudioCtx();
+        }
+        if (callAudioCtx.state === 'suspended') {
+          callAudioCtx.resume();
+        }
+      } catch (e) {
+        console.warn('Call AudioContext init error:', e);
+      }
+    }
 
     startVideoCallBtn.addEventListener('click', () => {
+      unlockCallAudioContext();
       if (activePartnerUid) initiateCall(activePartnerUid, activeChatTitle.innerText, 'video');
     });
     startVoiceCallBtn.addEventListener('click', () => {
+      unlockCallAudioContext();
       if (activePartnerUid) initiateCall(activePartnerUid, activeChatTitle.innerText, 'voice');
     });
+
+    function playRemoteMediaStream(stream) {
+      if (!stream) return;
+      console.log('🔊 Routing remote WebRTC media stream to speaker...');
+      
+      // 1. Dedicated HTML5 Audio Pipeline
+      try {
+        let rAudio = document.getElementById('remoteAudioEl');
+        if (!rAudio) {
+          rAudio = document.createElement('audio');
+          rAudio.id = 'remoteAudioEl';
+          rAudio.autoplay = true;
+          rAudio.playsInline = true;
+          document.body.appendChild(rAudio);
+        }
+        rAudio.srcObject = stream;
+        rAudio.volume = 1.0;
+        rAudio.play().catch(e => console.warn('HTML5 Audio autoplay notice:', e));
+      } catch (err) {
+        console.warn('HTML5 Audio attach error:', err);
+      }
+
+      // 2. Hardware WebAudio Speaker Bridge (Guaranteed Output)
+      try {
+        unlockCallAudioContext();
+        if (callAudioCtx && stream.getAudioTracks().length > 0) {
+          if (callAudioSourceNode) {
+            try { callAudioSourceNode.disconnect(); } catch (e) {}
+          }
+          const audioStreamOnly = new MediaStream(stream.getAudioTracks());
+          callAudioSourceNode = callAudioCtx.createMediaStreamSource(audioStreamOnly);
+          callAudioSourceNode.connect(callAudioCtx.destination);
+          console.log('✅ Two-way voice stream connected to hardware audio speakers!');
+        }
+      } catch (err) {
+        console.warn('WebAudio direct speaker routing error:', err);
+      }
+    }
 
     function setupPeerConnectionListeners(targetUid) {
       if (!peerConnection) return;
@@ -5674,17 +5730,14 @@
           stream.addTrack(event.track);
         }
 
-        // 1. Crystal-Clear Audio Playback (Voice & Video Calls)
-        if (remoteAudioEl) {
-          remoteAudioEl.srcObject = stream;
-          remoteAudioEl.volume = 1.0;
-          remoteAudioEl.play().catch(err => console.warn('Remote audio autoplay blocked:', err));
-        }
+        // Play crystal clear remote audio
+        playRemoteMediaStream(stream);
 
-        // 2. Video Playback (Video Call & Screen Sharing)
+        // Video Playback (Video Call & Screen Sharing)
         if (remoteVideoEl) {
           remoteVideoEl.srcObject = stream;
-          remoteVideoEl.play().catch(err => console.warn('Remote video autoplay blocked:', err));
+          remoteVideoEl.muted = true; // Audio is handled by dedicated remoteAudio & WebAudio
+          remoteVideoEl.play().catch(err => console.warn('Remote video autoplay error:', err));
         }
 
         const hasVideo = stream.getVideoTracks().some(t => t.readyState === 'live' && t.enabled);
@@ -5713,7 +5766,7 @@
         if (cState === 'connected' || iState === 'connected' || iState === 'completed') {
           stopCallSounds();
           callModalStatus.innerText = '00:00';
-          if (callSubstatus) callSubstatus.innerText = 'Connected • HD Encrypted';
+          if (callSubstatus) callSubstatus.innerText = 'Connected • HD Audio Live';
           startCallTimer();
         }
       };
@@ -5821,6 +5874,7 @@
     }
 
     acceptCallBtn.addEventListener('click', async () => {
+      unlockCallAudioContext();
       stopCallSounds();
       incomingCallModal.classList.add('hidden');
       incomingCallModal.classList.remove('flex');
@@ -6049,6 +6103,10 @@
       stopCallSounds();
       stopScreenShare();
       if (callTimerInterval) { clearInterval(callTimerInterval); callTimerInterval = null; }
+      if (callAudioSourceNode) {
+        try { callAudioSourceNode.disconnect(); } catch (e) {}
+        callAudioSourceNode = null;
+      }
       if (localStream) {
         localStream.getTracks().forEach(t => t.stop());
         localStream = null;

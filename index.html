@@ -2735,7 +2735,24 @@
     function playNotificationSound() {
       if (!soundEnabled) return;
       try {
-        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const AudioCtxClass = window.AudioContext || window.webkitAudioContext;
+        if (!AudioCtxClass) return;
+        const ctx = new AudioCtxClass();
+        if (ctx.state === 'suspended') {
+          ctx.resume().then(() => {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.frequency.setValueAtTime(880, ctx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(1318.5, ctx.currentTime + 0.12);
+            gain.gain.setValueAtTime(0.15, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.28);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start();
+            osc.stop(ctx.currentTime + 0.3);
+          }).catch(() => {});
+          return;
+        }
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
         osc.frequency.setValueAtTime(880, ctx.currentTime);
@@ -4191,7 +4208,7 @@
         // Dark Cyber Glass Action Bar on Message Hover
         const msgActionBar = msg.deleted ? '' : `
           <div class="msg-action-bar hidden group-hover:flex ${isMe ? 'right-2' : 'left-2'}">
-            ${msg.text ? `<button class="msg-action-btn text-emerald-400 hover:text-emerald-300" onclick="speakMessageText(this, ${JSON.stringify(msg.text || '')}, event)" title="Listen / Read aloud">🔊</button>` : ''}
+            ${msg.text ? `<button class="msg-action-btn text-emerald-400 hover:text-emerald-300" onclick="triggerSpeakMessage('${msg.id}', this, event)" title="Listen / Read aloud">🔊</button>` : ''}
             <button class="msg-action-btn" onclick="setReplyTo('${msg.id}', '${escapeHtml(msg.senderName || 'Contact')}', '${escapeHtml(msg.text || '')}', '${msg.mediaType || 'text'}')" title="Reply">
               <svg class="w-4 h-4 fill-none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"/></svg>
             </button>
@@ -4218,7 +4235,7 @@
             ${contentHtml}
             <div class="flex items-center justify-end gap-1.5 mt-1.5 pt-0.5 text-[10.5px] text-[#94a3b8] select-none font-mono">
               ${(!msg.deleted && msg.text) ? `
-                <button class="tts-speak-btn" onclick="speakMessageText(this, ${JSON.stringify(msg.text || '')}, event)" title="Listen / Read aloud">
+                <button class="tts-speak-btn" onclick="triggerSpeakMessage('${msg.id}', this, event)" title="Listen / Read aloud">
                   <svg class="w-3.5 h-3.5 fill-none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072M18.364 5.636a9 9 0 010 12.728M11 5L6 9H2v6h4l5 4V5z"/></svg>
                 </button>
               ` : ''}
@@ -4234,6 +4251,18 @@
 
       messagesArea.scrollTop = messagesArea.scrollHeight;
     }
+
+    // Safe trigger helper using message ID
+    window.triggerSpeakMessage = function(msgId, btnEl, e) {
+      if (e) {
+        try { e.preventDefault(); e.stopPropagation(); } catch(err) {}
+      }
+      if (!msgId || !activeChatId) return;
+      const chatMsgs = messagesDb[activeChatId] || [];
+      const msgObj = chatMsgs.find(m => m.id === msgId);
+      if (!msgObj || !msgObj.text) return;
+      speakMessageText(btnEl, msgObj.text, e);
+    };
 
     // ----------------------------------------------------------------------
     // Smart Multilingual Text-to-Speech (TTS) Engine

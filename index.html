@@ -1960,6 +1960,7 @@
     let soundEnabled = true;
     let ringtoneInterval = null;
     let ringtoneAudio = null;
+    let _ringtoneResumeListener = null;
 
     function initRingtoneAudio() {
       if (!ringtoneAudio) {
@@ -1976,6 +1977,8 @@
       }
     }
 
+    // Warm up immediately so there is zero delay on incoming call
+    try { initRingtoneAudio(); } catch(e) {}
     document.addEventListener('click', () => { initRingtoneAudio(); }, { once: true });
     document.addEventListener('touchstart', () => { initRingtoneAudio(); }, { once: true });
 
@@ -1985,32 +1988,27 @@
     function playRingtone() {
       stopCallSounds();
       if (!soundEnabled) return;
-      try {
-        initRingtoneAudio();
-        if (ringtoneAudio) {
+      initRingtoneAudio();
+      if (ringtoneAudio) {
+        try {
           ringtoneAudio.currentTime = 0;
           ringtoneAudio.volume = 1.0;
           const playPromise = ringtoneAudio.play();
           if (playPromise !== undefined) {
             playPromise.catch(e => {
               console.warn('uthaiye_na.mp3 autoplay unmuted attempt...', e);
-              // Retry on user interaction
-              const resumeOnInteraction = () => {
-                ringtoneAudio.play().catch(() => {});
-                document.removeEventListener('click', resumeOnInteraction);
-                document.removeEventListener('touchstart', resumeOnInteraction);
+              _ringtoneResumeListener = () => {
+                if (incomingCallModal && !incomingCallModal.classList.contains('hidden')) {
+                  if (ringtoneAudio) ringtoneAudio.play().catch(() => {});
+                }
               };
-              document.addEventListener('click', resumeOnInteraction, { once: true });
-              document.addEventListener('touchstart', resumeOnInteraction, { once: true });
-              playSynthesizedRingtone();
+              document.addEventListener('click', _ringtoneResumeListener, { once: true });
+              document.addEventListener('touchstart', _ringtoneResumeListener, { once: true });
             });
           }
-        } else {
-          playSynthesizedRingtone();
+        } catch (e) {
+          console.warn('Ringtone error:', e);
         }
-      } catch (e) {
-        console.warn('Ringtone error:', e);
-        playSynthesizedRingtone();
       }
     }
 
@@ -2109,6 +2107,11 @@
     }
 
     function stopCallSounds() {
+      if (_ringtoneResumeListener) {
+        document.removeEventListener('click', _ringtoneResumeListener);
+        document.removeEventListener('touchstart', _ringtoneResumeListener);
+        _ringtoneResumeListener = null;
+      }
       if (ringtoneAudio) {
         try {
           ringtoneAudio.pause();

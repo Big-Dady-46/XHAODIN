@@ -736,6 +736,9 @@
               <button id="startVoiceCallBtn" title="Voice call" class="p-2 rounded-xl hover:bg-[#1b2d37] hover:text-white transition">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a11.042 11.042 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/></svg>
               </button>
+              <button id="activeChatDeleteHeaderBtn" title="Delete conversation from Firebase" class="p-2 rounded-xl hover:bg-[#1b2d37] text-[#94a3b8] hover:text-rose-400 transition">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+              </button>
             </div>
           </div>
 
@@ -2052,13 +2055,18 @@
     const typingUsers = new Map();
     let hiddenChats = [];
 
-    let usersMap = JSON.parse(localStorage.getItem('wa_live_users') || '{}');
-    let groupsMap = JSON.parse(localStorage.getItem('wa_live_groups') || '{}');
-    let messagesDb = JSON.parse(localStorage.getItem('wa_live_messages') || '{}');
-    let statusesDb = JSON.parse(localStorage.getItem('wa_live_statuses') || '[]');
-    let myCallsList = JSON.parse(localStorage.getItem('wa_live_calls') || '[]');
+    // Clear any legacy dummy caches - Firebase RTDB is our single source of truth
+    localStorage.removeItem('wa_live_users');
+    localStorage.removeItem('wa_live_groups');
+    localStorage.removeItem('wa_live_messages');
+
+    let usersMap = {};
+    let groupsMap = {};
+    let messagesDb = {};
+    let statusesDb = [];
+    let myCallsList = [];
     let favoriteChats = JSON.parse(localStorage.getItem('wa_live_favorites_' + (currentUser ? currentUser.uid : 'global')) || '[]');
-    let aiUnreadCount = parseInt(localStorage.getItem('xhaodin_ai_unread') || '0');
+    let aiUnreadCount = 0;
 
     function updateAiUnreadDot() {
       const dot = document.getElementById('aiUnreadDot');
@@ -2069,6 +2077,17 @@
 
     function isChatFavorite(chatId) {
       return Array.isArray(favoriteChats) && favoriteChats.includes(chatId);
+    }
+
+    function isUserOnline(u) {
+      if (!u) return false;
+      if (u.isBot || u.uid === 'xhaodin_ai_bot') return true;
+      if (currentUser && u.uid === currentUser.uid) return true;
+      if (u.online === true) {
+        if (!u.lastSeen) return false;
+        return (Date.now() - u.lastSeen) < 75000;
+      }
+      return false;
     }
 
     function toggleFavoriteChat(chatId, e) {
@@ -2227,19 +2246,6 @@
       usersMap[uid] = sanitizeUserData(usersMap[uid]);
     });
 
-    if (!groupsMap['group_global_community']) {
-      groupsMap['group_global_community'] = {
-        id: 'group_global_community',
-        name: '🌍 Global Community Lounge',
-        icon: '🌍',
-        createdBy: 'system',
-        isMainGroup: true,
-        members: ['all'],
-        createdAt: 1700000000000
-      };
-      saveLocalData();
-    }
-
     // Render Auth Scenic Avatar Presets
     function renderAuthAvatarPicker() {
       if (!authAvatarGrid) return;
@@ -2330,7 +2336,7 @@
       firebaseReady = true;
       if (!currentUser) return;
 
-      // 1. Live Users Sync - ONLY real Firebase users
+      // 1. Live Users Sync - Realtime Firebase users
       fbDb.ref('users').on('value', snap => {
         const allUsers = snap.val() || {};
         usersMap = {};
@@ -2343,12 +2349,20 @@
           usersMap['xhaodin_ai_bot'] = {
             uid: 'xhaodin_ai_bot',
             username: 'XHAODIN AI',
+            displayName: 'XHAODIN AI Assistant',
             email: 'ai@xhaodin.local',
             online: true,
             accountStatus: 'approved',
             role: 'bot',
             isBot: true,
             status: 'Always online AI companion'
+          };
+        }
+        if (currentUser && currentUser.uid) {
+          usersMap[currentUser.uid] = {
+            ...(usersMap[currentUser.uid] || {}),
+            ...currentUser,
+            online: true
           };
         }
         saveLocalData();
@@ -2395,21 +2409,9 @@
         renderSidebarList();
       });
 
-      // 3. Live Groups Sync
+      // 3. Live Groups Sync (Pure Firebase Database)
       fbDb.ref('groups').on('value', snap => {
         groupsMap = snap.val() || {};
-        if (!groupsMap['group_global_community']) {
-          groupsMap['group_global_community'] = {
-            id: 'group_global_community',
-            name: '🌍 Global Community Lounge',
-            icon: '🌍',
-            createdBy: 'system',
-            isMainGroup: true,
-            members: ['all'],
-            createdAt: 1700000000000
-          };
-          firebaseWrite('groups/group_global_community', groupsMap['group_global_community']);
-        }
         saveLocalData();
         renderSidebarList();
       });
@@ -2475,6 +2477,20 @@
         if (snap.val() === true) {
           myUserRef.update({ online: true, lastSeen: Date.now() });
           myUserRef.onDisconnect().update({ online: false, lastSeen: Date.now() });
+        }
+      });
+
+      // Active presence heartbeat (keeps lastSeen fresh while tab is open)
+      if (window._presenceHeartbeat) clearInterval(window._presenceHeartbeat);
+      window._presenceHeartbeat = setInterval(() => {
+        if (currentUser && currentUser.uid && fbDb) {
+          myUserRef.update({ online: true, lastSeen: Date.now() });
+        }
+      }, 20000);
+
+      window.addEventListener('beforeunload', () => {
+        if (currentUser && currentUser.uid && fbDb) {
+          myUserRef.update({ online: false, lastSeen: Date.now() });
         }
       });
 
@@ -2840,22 +2856,36 @@
     function loginUser(userObj) {
       currentUser = sanitizeUserData(userObj);
       if (!currentUser.avatar) {
-        currentUser.avatar = selectedAuthAvatar || getAvatarForUser(currentUser.displayName);
+        currentUser.avatar = selectedAuthAvatar || getAvatarForUser(currentUser.displayName || currentUser.username || 'User');
       }
       sessionStorage.setItem('wa_current_user', JSON.stringify(currentUser));
 
-      const dName = currentUser.displayName || currentUser.username || currentUser.email.split('@')[0];
+      const dName = currentUser.displayName || currentUser.username || (currentUser.email && currentUser.email.includes('@') ? currentUser.email.split('@')[0] : (currentUser.email || 'User'));
       
-      usersMap[currentUser.uid] = {
+      const userData = {
         uid: currentUser.uid,
         username: dName,
-        email: currentUser.email,
+        displayName: dName,
+        email: currentUser.email || '',
         avatar: currentUser.avatar,
         status: currentUser.status || 'Hey there! I am using XHAODIN.',
         online: true,
-        lastSeen: Date.now()
+        lastSeen: Date.now(),
+        accountStatus: currentUser.accountStatus || 'approved',
+        role: (currentUser.email && currentUser.email.toLowerCase() === 'admin@gmail.com') ? 'admin' : (currentUser.role || 'user')
       };
+
+      usersMap[currentUser.uid] = userData;
       saveLocalData();
+
+      // Ensure user profile is registered and active in Firebase Realtime Database
+      try {
+        if (fbDb && currentUser.uid) {
+          fbDb.ref('users/' + currentUser.uid).update(userData);
+        }
+      } catch (e) {
+        console.warn('Firebase user sync note:', e);
+      }
 
       updateMyProfileUI();
 
@@ -3267,6 +3297,55 @@
       if (activeChatId) toggleFavoriteChat(activeChatId);
     });
 
+    // Global Robust Chat & Group Deletion (Removes from Firebase permanently)
+    window.deleteEntireChat = function(chatId = activeChatId, isGroup = (activeChatType === 'group')) {
+      if (!chatId) return;
+      const grp = groupsMap[chatId];
+      const isActualGroup = isGroup || chatId.startsWith('group_') || !!grp;
+      const targetName = isActualGroup ? (grp?.name || 'Group') : (usersMap[activePartnerUid]?.username || 'this contact');
+      
+      const promptText = isActualGroup 
+        ? `Are you sure you want to permanently delete the group "${targetName}" and all its messages from Firebase?`
+        : `Are you sure you want to permanently delete your entire conversation with "${targetName}" from Firebase?`;
+
+      if (confirm(promptText)) {
+        if (fbDb) {
+          if (isActualGroup) {
+            fbDb.ref('groups/' + chatId).remove().catch(e => console.error('Error removing group:', e));
+          }
+          fbDb.ref('messages/' + chatId).remove().catch(e => console.error('Error removing messages:', e));
+        }
+        delete messagesDb[chatId];
+        if (isActualGroup) delete groupsMap[chatId];
+        
+        if (activeChatId === chatId) {
+          activeChatId = null;
+          activePartnerUid = null;
+          if (emptyChatScreen) emptyChatScreen.classList.remove('hidden');
+          if (activeChatScreen) activeChatScreen.classList.add('hidden');
+        }
+
+        // On mobile: switch back to sidebar
+        if (window.innerWidth < 768) {
+          if (sidebarCol) {
+            sidebarCol.classList.remove('hidden');
+            sidebarCol.classList.add('flex');
+          }
+          if (chatAreaCol) {
+            chatAreaCol.classList.add('hidden');
+            chatAreaCol.classList.remove('flex');
+          }
+        }
+
+        renderSidebarList();
+      }
+    };
+
+    // Active Chat Delete Button (Header)
+    document.getElementById('activeChatDeleteHeaderBtn')?.addEventListener('click', () => {
+      if (activeChatId) deleteEntireChat(activeChatId, activeChatType === 'group');
+    });
+
     // ----------------------------------------------------------------------
     // 5. Sidebar Dynamic Channels (Chats Tab)
     // ----------------------------------------------------------------------
@@ -3337,15 +3416,38 @@
               </div>
             </div>
           `;
+          item.oncontextmenu = (e) => {
+            e.preventDefault();
+            deleteEntireChat(gId, true);
+          };
+
           channelsList.appendChild(item);
         });
       }
 
-      // Direct Contacts
+      // Direct Contacts (ONLY show if message history exists in Firebase OR active open chat)
       if (currentFilter !== 'groups') {
-        const contactUids = Object.keys(usersMap).filter(uid => uid !== (currentUser ? currentUser.uid : '') && uid !== 'xhaodin_ai_bot');
+        const contactUids = Object.keys(usersMap).filter(uid => uid !== (currentUser ? currentUser.uid : ''));
 
-        contactUids.forEach((uId) => {
+        // Filter: ONLY include direct chats that have messages in Firebase or currently opened
+        const activeContactUids = contactUids.filter(uId => {
+          const compositeChatId = currentUser ? getDirectChatId(currentUser.uid, uId) : uId;
+          const dMsgs = messagesDb[compositeChatId] || [];
+          return dMsgs.length > 0 || activeChatId === compositeChatId;
+        });
+
+        // Sort: Most recent message timestamp first
+        activeContactUids.sort((a, b) => {
+          const chatA = currentUser ? getDirectChatId(currentUser.uid, a) : a;
+          const chatB = currentUser ? getDirectChatId(currentUser.uid, b) : b;
+          const msgsA = messagesDb[chatA] || [];
+          const msgsB = messagesDb[chatB] || [];
+          const timeA = msgsA.length ? (msgsA[msgsA.length - 1].timestamp || 0) : 0;
+          const timeB = msgsB.length ? (msgsB[msgsB.length - 1].timestamp || 0) : 0;
+          return timeB - timeA;
+        });
+
+        activeContactUids.forEach((uId) => {
           const u = usersMap[uId];
           if (!u) return;
 
@@ -3358,7 +3460,7 @@
 
           const dMsgs = messagesDb[compositeChatId] || [];
           const lastMsg = dMsgs[dMsgs.length - 1];
-          const username = u.username || u.email.split('@')[0];
+          const username = u.username || u.displayName || (u.email ? u.email.split('@')[0] : 'User');
 
           const unreadCount = dMsgs.filter(m => currentUser && m.senderId !== currentUser.uid && m.status !== 'read').length;
 
@@ -3389,7 +3491,7 @@
           } else if (lastMsg) {
             snippetContent = `${tickHtml}<span class="truncate">${escapeHtml(lastMsg.text || (lastMsg.mediaType ? `[${lastMsg.mediaType}]` : 'Message'))}</span>`;
           } else {
-            snippetContent = `<span class="truncate">${u.online ? '<span class="text-[#00e599] font-medium flex items-center gap-1.5"><span class="cyber-status-beacon scale-75"></span><span>online</span></span>' : 'Tap to start chat'}</span>`;
+            snippetContent = `<span class="truncate text-[#64748b]">No messages yet</span>`;
           }
 
           const item = document.createElement('div');
@@ -3398,13 +3500,17 @@
           item.dataset.chatType = 'direct';
           item.dataset.partnerUid = uId;
           item.onclick = () => openChat(compositeChatId, username, 'direct', uId);
+          item.oncontextmenu = (e) => {
+            e.preventDefault();
+            deleteEntireChat(compositeChatId, false);
+          };
 
           item.innerHTML = `
             <div class="relative flex-shrink-0">
               <div class="w-12 h-12 rounded-2xl overflow-hidden bg-[#10191f] border border-white/10 shadow-sm">
                 <img src="${userAv}" class="w-full h-full object-cover">
               </div>
-              ${u.online ? `<span class="absolute -bottom-1 -right-1 cyber-status-beacon scale-75"></span>` : ''}
+              ${isUserOnline(u) ? `<span class="absolute -bottom-1 -right-1 cyber-status-beacon scale-75"></span>` : ''}
             </div>
             <div class="flex-1 min-w-0">
               <div class="flex justify-between items-baseline mb-1">
@@ -4085,6 +4191,7 @@
         // Dark Cyber Glass Action Bar on Message Hover
         const msgActionBar = msg.deleted ? '' : `
           <div class="msg-action-bar hidden group-hover:flex ${isMe ? 'right-2' : 'left-2'}">
+            ${msg.text ? `<button class="msg-action-btn text-emerald-400 hover:text-emerald-300" onclick="speakMessageText(this, ${JSON.stringify(msg.text || '')}, event)" title="Listen / Read aloud">🔊</button>` : ''}
             <button class="msg-action-btn" onclick="setReplyTo('${msg.id}', '${escapeHtml(msg.senderName || 'Contact')}', '${escapeHtml(msg.text || '')}', '${msg.mediaType || 'text'}')" title="Reply">
               <svg class="w-4 h-4 fill-none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"/></svg>
             </button>
@@ -4105,11 +4212,16 @@
 
         msgRow.innerHTML = `
           ${msgActionBar}
-          <div class="px-4 py-2.5 text-xs relative ${bubbleClass} min-w-[95px] max-w-[85%] sm:max-w-[65%]">
+          <div class="px-4 py-2.5 text-xs relative ${bubbleClass} min-w-[110px] max-w-[85%] sm:max-w-[65%]">
             ${senderHeader}
             ${quotedBoxHtml}
             ${contentHtml}
             <div class="absolute bottom-1.5 right-2.5 text-[10.5px] text-[#94a3b8] flex items-center justify-end gap-1 select-none font-mono">
+              ${(!msg.deleted && msg.text) ? `
+                <button class="tts-speak-btn" onclick="speakMessageText(this, ${JSON.stringify(msg.text || '')}, event)" title="Listen / Read aloud">
+                  <svg class="w-3 h-3 fill-none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072M18.364 5.636a9 9 0 010 12.728M11 5L6 9H2v6h4l5 4V5z"/></svg>
+                </button>
+              ` : ''}
               ${starBadge}
               <span>${msg.time || formatTime()}</span>
               ${tickElement}
@@ -4121,6 +4233,117 @@
       });
 
       messagesArea.scrollTop = messagesArea.scrollHeight;
+    }
+
+    // ----------------------------------------------------------------------
+    // Smart Multilingual Text-to-Speech (TTS) Engine
+    // Supports Roman Urdu, Urdu (Arabic script), Hindi & English
+    // ----------------------------------------------------------------------
+    let currentTtsUtterance = null;
+    let activeTtsButton = null;
+
+    window.speakMessageText = function(btnEl, text, e) {
+      if (e) e.stopPropagation();
+      if (!text || typeof text !== 'string' || !text.trim()) return;
+
+      if (!('speechSynthesis' in window)) {
+        alert('Text-to-Speech is not supported on this browser.');
+        return;
+      }
+
+      // If already speaking THIS message, toggle stop
+      if (window.speechSynthesis.speaking && activeTtsButton === btnEl) {
+        window.speechSynthesis.cancel();
+        resetTtsButtonState();
+        return;
+      }
+
+      // Stop any other active speech
+      window.speechSynthesis.cancel();
+      resetTtsButtonState();
+
+      // Clean raw text (strip markdown symbols, HTML tags, excess whitespace)
+      const cleanText = text
+        .replace(/<[^>]*>/g, ' ')
+        .replace(/[*_~`#\[\]\(\)]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+      if (!cleanText) return;
+
+      const utterance = new SpeechSynthesisUtterance(cleanText);
+      currentTtsUtterance = utterance;
+      activeTtsButton = btnEl;
+
+      if (btnEl) {
+        btnEl.classList.add('tts-speaking');
+        btnEl.setAttribute('title', 'Click to stop reading');
+      }
+
+      // Smart Language Detection:
+      // 1. Perso-Arabic Urdu Script: U+0600 - U+06FF
+      const isUrduScript = /[\u0600-\u06FF]/.test(cleanText);
+
+      // 2. Common Roman Urdu / Hindi keywords
+      const romanUrduWords = [
+        'kya', 'hai', 'hain', 'kaise', 'kese', 'karo', 'kar', 'karne', 'bhai', 'bhaiya', 
+        'mai', 'main', 'mera', 'meri', 'mere', 'tum', 'aap', 'apna', 'apni', 'theek', 
+        'thik', 'nahi', 'nhi', 'haan', 'aj', 'aaj', 'kal', 'sab', 'hoga', 'hogi', 
+        'batao', 'bataiye', 'suno', 'yar', 'yaar', 'accha', 'acha', 'shukriya', 'karna', 
+        'raha', 'rahi', 'rahe', 'gaya', 'gayi', 'aao', 'baat', 'bolo', 'sunao', 'shuru', 
+        'khatam', 'muje', 'mujhe', 'hum', 'woh', 'ye', 'yeh', 'wala', 'wali', 'wale',
+        'kuch', 'pehle', 'kharab', 'kaam', 'rha', 'rahe', 'sirf', 'shukria', 'kia'
+      ];
+      
+      const lowerClean = cleanText.toLowerCase();
+      const tokens = lowerClean.split(/[^a-z0-9]+/);
+      const isRomanUrdu = tokens.some(t => romanUrduWords.includes(t));
+
+      const availableVoices = window.speechSynthesis.getVoices() || [];
+
+      if (isUrduScript) {
+        utterance.lang = 'ur-PK';
+        const urVoice = availableVoices.find(v => v.lang.startsWith('ur') || v.lang.includes('PK') || v.lang.startsWith('hi'));
+        if (urVoice) utterance.voice = urVoice;
+      } else if (isRomanUrdu) {
+        // Natural Indian / Urdu accent voice for seamless Roman Urdu pronunciation
+        utterance.lang = 'hi-IN';
+        const indianVoice = availableVoices.find(v => v.lang === 'hi-IN' || v.lang.startsWith('hi') || v.lang === 'ur-PK' || v.lang === 'en-IN' || v.name.toLowerCase().includes('india') || v.name.toLowerCase().includes('hindi'));
+        if (indianVoice) utterance.voice = indianVoice;
+      } else {
+        utterance.lang = 'en-US';
+        const enVoice = availableVoices.find(v => (v.lang.startsWith('en') && (v.name.includes('Natural') || v.name.includes('Google') || v.default)) || v.lang === 'en-US');
+        if (enVoice) utterance.voice = enVoice;
+      }
+
+      utterance.rate = 0.95; // Crisp, clear pace
+      utterance.pitch = 1.0;
+
+      utterance.onend = () => {
+        resetTtsButtonState();
+      };
+
+      utterance.onerror = () => {
+        resetTtsButtonState();
+      };
+
+      window.speechSynthesis.speak(utterance);
+    };
+
+    function resetTtsButtonState() {
+      if (activeTtsButton) {
+        activeTtsButton.classList.remove('tts-speaking');
+        activeTtsButton.setAttribute('title', 'Listen / Read aloud');
+        activeTtsButton = null;
+      }
+      currentTtsUtterance = null;
+    }
+
+    // Pre-populate voices on load
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.onvoiceschanged = () => {
+        window.speechSynthesis.getVoices();
+      };
     }
 
     // ----------------------------------------------------------------------
@@ -4641,6 +4864,29 @@
       contactsDrawer.classList.remove('hidden');
       contactsDrawer.classList.add('flex');
       searchContactsInput.focus();
+
+      // Refresh users from Firebase immediately to ensure any newly logged in users appear
+      try {
+        if (fbDb) {
+          fbDb.ref('users').once('value').then(snap => {
+            const allUsers = snap.val() || {};
+            Object.keys(allUsers).forEach(uid => {
+              if (allUsers[uid]) {
+                usersMap[uid] = sanitizeUserData(allUsers[uid]);
+              }
+            });
+            if (currentUser && currentUser.uid) {
+              usersMap[currentUser.uid] = {
+                ...(usersMap[currentUser.uid] || {}),
+                ...currentUser,
+                online: true
+              };
+            }
+            saveLocalData();
+            renderAvailableUsersDrawer();
+          });
+        }
+      } catch (e) {}
     });
 
     closeContactsDrawerBtn.addEventListener('click', () => {
@@ -4671,16 +4917,31 @@
       const search = (searchContactsInput?.value || '').toLowerCase().trim();
       availableUsersList.innerHTML = '';
 
-      const uids = Object.keys(usersMap).filter(uid => uid !== (currentUser ? currentUser.uid : ''));
+      const myUid = currentUser ? currentUser.uid : '';
+      const uids = Object.keys(usersMap).filter(uid => uid !== myUid);
+
+      // Sort: Actively Online users first (via isUserOnline), then alphabetically by name
+      uids.sort((a, b) => {
+        const userA = usersMap[a] || {};
+        const userB = usersMap[b] || {};
+        const onlineA = isUserOnline(userA);
+        const onlineB = isUserOnline(userB);
+        if (onlineA && !onlineB) return -1;
+        if (!onlineA && onlineB) return 1;
+        const nameA = (userA.username || userA.displayName || userA.email || '').toLowerCase();
+        const nameB = (userB.username || userB.displayName || userB.email || '').toLowerCase();
+        return nameA.localeCompare(nameB);
+      });
 
       let rendered = 0;
       uids.forEach(uid => {
         const u = usersMap[uid];
         if (!u) return;
 
-        const name = u.username || u.email.split('@')[0];
+        const name = u.username || u.displayName || (u.email ? u.email.split('@')[0] : 'User');
         const email = u.email || '';
         const bio = u.status || 'Hey there! I am using XHAODIN.';
+        const online = isUserOnline(u);
 
         if (search && !name.toLowerCase().includes(search) && !email.toLowerCase().includes(search)) {
           return;
@@ -4688,7 +4949,7 @@
 
         rendered++;
         const item = document.createElement('div');
-        item.className = 'px-5 py-3 hover:bg-[#10191f] cursor-pointer flex items-center gap-3.5 transition border-b border-white/10';
+        item.className = 'px-5 py-3 hover:bg-[#10191f] cursor-pointer flex items-center gap-3.5 transition border-b border-white/10 group';
         item.onclick = () => {
           contactsDrawer.classList.add('hidden');
           contactsDrawer.classList.remove('flex');
@@ -4700,15 +4961,18 @@
 
         item.innerHTML = `
           <div class="relative flex-shrink-0">
-            <div class="w-12 h-12 rounded-2xl overflow-hidden bg-[#10191f] border border-white/10 shadow-sm">
+            <div class="w-12 h-12 rounded-2xl overflow-hidden bg-[#10191f] border border-white/10 shadow-sm group-hover:border-[#00e599]/60 transition">
               <img src="${avUrl}" class="w-full h-full object-cover">
             </div>
-            ${u.online ? `<span class="absolute -bottom-1 -right-1 cyber-status-beacon scale-75"></span>` : ''}
+            ${online ? `<span class="absolute -bottom-1 -right-1 cyber-status-beacon scale-75"></span>` : ''}
           </div>
           <div class="flex-1 min-w-0">
             <div class="flex items-center justify-between">
-              <h4 class="text-[15px] font-bold text-[#f8fafc] truncate font-heading">${escapeHtml(name)}</h4>
-              ${u.online ? `<span class="cyber-signal-badge text-[9px] py-0.5 px-2 font-medium">ONLINE</span>` : `<span class="text-[10px] text-[#64748b] font-medium uppercase font-heading">OFFLINE</span>`}
+              <div class="flex items-center gap-2 truncate pr-1">
+                <h4 class="text-[15px] font-bold text-[#f8fafc] truncate font-heading group-hover:text-[#00e599] transition-colors">${escapeHtml(name)}</h4>
+                ${u.isBot ? `<span class="text-[9px] bg-purple-500/20 text-purple-400 border border-purple-500/30 px-1.5 py-0.5 rounded font-mono font-bold">AI BOT</span>` : ''}
+              </div>
+              ${online ? `<span class="cyber-signal-badge text-[9px] py-0.5 px-2 font-medium flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-[#00e599] animate-ping"></span>ONLINE</span>` : `<span class="text-[10px] text-[#64748b] font-medium uppercase font-heading">${u.lastSeen ? `Last seen ${formatDateOrTime(u.lastSeen)}` : 'OFFLINE'}</span>`}
             </div>
             <p class="text-xs text-[#94a3b8] truncate mt-0.5">${escapeHtml(bio)}</p>
           </div>

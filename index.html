@@ -2813,76 +2813,87 @@
     }
 
     let queuedIceCandidates = [];
+    let currentCallPartnerUid = null;
 
-    function handleCallSignal(data) {
+    async function handleCallSignal(data) {
+      if (!data) return;
       const { signalType, callData } = data;
-      if (currentUser && callData) {
-        if (signalType === 'OFFER') {
-          if (callData.receiverUid === currentUser.uid) {
-            activeCallId = callData.callId;
-            currentCallData = callData;
-            currentCallType = callData.callType || 'voice';
-            queuedIceCandidates = [];
+      if (!callData) return;
 
-            incomingCallerName.innerText = callData.callerName || 'Contact';
-            const callAvUrl = getAvatarForUser(callData.callerName, usersMap[callData.callerUid]?.avatar);
-            if (incomingCallerAvatarImg) {
-              incomingCallerAvatarImg.src = callAvUrl;
-            }
-            incomingCallTypeBadge.innerText = `${currentCallType.toUpperCase()} CALL`;
+      if (signalType === 'OFFER') {
+        if (currentUser && callData.receiverUid === currentUser.uid) {
+          activeCallId = callData.callId;
+          currentCallData = callData;
+          currentCallPartnerUid = callData.callerUid;
+          currentCallType = callData.callType || 'voice';
+          queuedIceCandidates = [];
 
-            incomingCallModal.classList.remove('hidden');
-            incomingCallModal.classList.add('flex');
-            
-            if ('vibrate' in navigator) {
-              try { navigator.vibrate([400, 300, 400, 300, 1000]); } catch (e) {}
-            }
-            playRingtone();
-
-            showDesktopPushNotification(
-              `📞 Incoming ${currentCallType.toUpperCase()} Call`,
-              `${callData.callerName || 'Contact'} is calling you on XHAODIN...`,
-              getDirectChatId(currentUser.uid, callData.callerUid),
-              callData.callerUid,
-              true
-            );
+          incomingCallerName.innerText = callData.callerName || 'Contact';
+          const callAvUrl = getAvatarForUser(callData.callerName, usersMap[callData.callerUid]?.avatar);
+          if (incomingCallerAvatarImg) {
+            incomingCallerAvatarImg.src = callAvUrl;
           }
-        } else if (callData.callId === activeCallId) {
-          if (signalType === 'ANSWER' && callData.answer && peerConnection) {
-            peerConnection.setRemoteDescription(new RTCSessionDescription(callData.answer)).then(() => {
+          incomingCallTypeBadge.innerText = `${currentCallType.toUpperCase()} CALL`;
+
+          incomingCallModal.classList.remove('hidden');
+          incomingCallModal.classList.add('flex');
+          
+          if ('vibrate' in navigator) {
+            try { navigator.vibrate([400, 300, 400, 300, 1000]); } catch (e) {}
+          }
+          playRingtone();
+
+          showDesktopPushNotification(
+            `📞 Incoming ${currentCallType.toUpperCase()} Call`,
+            `${callData.callerName || 'Contact'} is calling you on XHAODIN...`,
+            getDirectChatId(currentUser.uid, callData.callerUid),
+            callData.callerUid,
+            true
+          );
+        }
+      } else if (callData.callId === activeCallId) {
+        if (signalType === 'ANSWER' && callData.answer && peerConnection) {
+          try {
+            if (peerConnection.signalingState === 'have-local-offer') {
+              await peerConnection.setRemoteDescription(new RTCSessionDescription(callData.answer));
               stopCallSounds();
               playCallConnected();
-              if (queuedIceCandidates.length > 0) {
-                queuedIceCandidates.forEach(cand => {
-                  peerConnection.addIceCandidate(new RTCIceCandidate(cand)).catch(() => {});
-                });
+              if (queuedIceCandidates && queuedIceCandidates.length > 0) {
+                for (const cand of queuedIceCandidates) {
+                  await peerConnection.addIceCandidate(new RTCIceCandidate(cand)).catch(() => {});
+                }
                 queuedIceCandidates = [];
               }
-            }).catch(e => console.warn('setRemoteDescription answer error:', e));
-          } else if (signalType === 'ICE_CANDIDATE' && callData.candidate) {
-            if (peerConnection && peerConnection.remoteDescription && peerConnection.remoteDescription.type) {
-              peerConnection.addIceCandidate(new RTCIceCandidate(callData.candidate)).catch(e => console.warn('ICE add error:', e));
-            } else {
-              queuedIceCandidates.push(callData.candidate);
             }
-          } else if (signalType === 'RENEGOTIATE_OFFER' && callData.offer && peerConnection) {
-            peerConnection.setRemoteDescription(new RTCSessionDescription(callData.offer)).then(async () => {
-              const answer = await peerConnection.createAnswer();
-              await peerConnection.setLocalDescription(answer);
-              sendWS('CALL_SIGNAL', {
-                targetUid: callData.callerUid,
-                signalType: 'RENEGOTIATE_ANSWER',
-                callData: { callId: activeCallId, answer: { sdp: answer.sdp, type: answer.type } }
-              });
-            }).catch(e => console.warn('Renegotiate offer error:', e));
-          } else if (signalType === 'RENEGOTIATE_ANSWER' && callData.answer && peerConnection) {
-            peerConnection.setRemoteDescription(new RTCSessionDescription(callData.answer)).catch(e => console.warn('Renegotiate answer error:', e));
-          } else if (signalType === 'END') {
-            callModalStatus.innerText = 'Call Ended';
-            if (callSubstatus) callSubstatus.innerText = 'Call has ended';
-            playCallEnded();
-            cleanupCall();
+          } catch (e) {
+            console.warn('setRemoteDescription answer error:', e);
           }
+        } else if (signalType === 'ICE_CANDIDATE' && callData.candidate) {
+          if (peerConnection && peerConnection.remoteDescription && peerConnection.remoteDescription.type) {
+            peerConnection.addIceCandidate(new RTCIceCandidate(callData.candidate)).catch(e => console.warn('ICE add error:', e));
+          } else {
+            queuedIceCandidates.push(callData.candidate);
+          }
+        } else if (signalType === 'RENEGOTIATE_OFFER' && callData.offer && peerConnection) {
+          try {
+            await peerConnection.setRemoteDescription(new RTCSessionDescription(callData.offer));
+            const answer = await peerConnection.createAnswer({ offerToReceiveAudio: true, offerToReceiveVideo: true });
+            await peerConnection.setLocalDescription(answer);
+            sendWS('CALL_SIGNAL', {
+              targetUid: callData.callerUid,
+              signalType: 'RENEGOTIATE_ANSWER',
+              callData: { callId: activeCallId, answer: { sdp: answer.sdp, type: answer.type } }
+            });
+          } catch (e) {
+            console.warn('Renegotiate offer error:', e);
+          }
+        } else if (signalType === 'RENEGOTIATE_ANSWER' && callData.answer && peerConnection) {
+          peerConnection.setRemoteDescription(new RTCSessionDescription(callData.answer)).catch(e => console.warn('Renegotiate answer error:', e));
+        } else if (signalType === 'END') {
+          callModalStatus.innerText = 'Call Ended';
+          if (callSubstatus) callSubstatus.innerText = 'Call has ended';
+          playCallEnded();
+          cleanupCall();
         }
       }
     }
@@ -5606,7 +5617,16 @@
         { urls: 'stun:stun2.l.google.com:19302' },
         { urls: 'stun:stun3.l.google.com:19302' },
         { urls: 'stun:stun4.l.google.com:19302' },
-        { urls: 'stun:global.stun.twilio.com:3478' }
+        { urls: 'stun:global.stun.twilio.com:3478' },
+        {
+          urls: [
+            'turn:openrelay.metered.ca:80',
+            'turn:openrelay.metered.ca:443',
+            'turn:openrelay.metered.ca:443?transport=tcp'
+          ],
+          username: 'openrelayproject',
+          credential: 'openrelayproject'
+        }
       ],
       iceCandidatePoolSize: 10
     };
@@ -5675,15 +5695,28 @@
         }
       };
 
-      peerConnection.onconnectionstatechange = () => {
-        console.log('WebRTC Connection State:', peerConnection.connectionState);
-        if (peerConnection.connectionState === 'connected') {
+      const checkAndSetConnected = () => {
+        const cState = peerConnection?.connectionState;
+        const iState = peerConnection?.iceConnectionState;
+        if (cState === 'connected' || iState === 'connected' || iState === 'completed') {
+          stopCallSounds();
           callModalStatus.innerText = '00:00';
           if (callSubstatus) callSubstatus.innerText = 'Connected • HD Encrypted';
           startCallTimer();
-        } else if (peerConnection.connectionState === 'disconnected' || peerConnection.connectionState === 'failed') {
+        }
+      };
+
+      peerConnection.onconnectionstatechange = () => {
+        console.log('WebRTC Connection State:', peerConnection?.connectionState);
+        checkAndSetConnected();
+        if (peerConnection?.connectionState === 'disconnected' || peerConnection?.connectionState === 'failed') {
           callModalStatus.innerText = 'Reconnecting...';
         }
+      };
+
+      peerConnection.oniceconnectionstatechange = () => {
+        console.log('ICE Connection State:', peerConnection?.iceConnectionState);
+        checkAndSetConnected();
       };
     }
 
@@ -5696,6 +5729,7 @@
       currentCallType = type;
       activeCallRole = 'caller';
       activeCallId = 'call_' + Date.now();
+      currentCallPartnerUid = partnerUid;
       callSeconds = 0;
       isMicMuted = false;
       isCamDisabled = false;
@@ -5781,6 +5815,7 @@
       if (!currentCallData) return;
 
       activeCallRole = 'receiver';
+      currentCallPartnerUid = currentCallData.callerUid;
       callModalName.innerText = currentCallData.callerName || 'Contact';
       const callAv = getAvatarForUser(currentCallData.callerName, usersMap[currentCallData.callerUid]?.avatar);
       if (callModalAvatarImg) callModalAvatarImg.src = callAv;
@@ -5833,9 +5868,9 @@
           
           // Flush any early ICE candidates
           if (queuedIceCandidates && queuedIceCandidates.length > 0) {
-            queuedIceCandidates.forEach(cand => {
-              peerConnection.addIceCandidate(new RTCIceCandidate(cand)).catch(() => {});
-            });
+            for (const cand of queuedIceCandidates) {
+              await peerConnection.addIceCandidate(new RTCIceCandidate(cand)).catch(() => {});
+            }
             queuedIceCandidates = [];
           }
 
@@ -5868,9 +5903,10 @@
       stopCallSounds();
       incomingCallModal.classList.add('hidden');
       incomingCallModal.classList.remove('flex');
-      if (currentCallData) {
+      const targetUid = currentCallPartnerUid || currentCallData?.callerUid;
+      if (targetUid) {
         sendWS('CALL_SIGNAL', {
-          targetUid: currentCallData.callerUid,
+          targetUid: targetUid,
           signalType: 'END',
           callData: { callId: activeCallId }
         });
@@ -5882,7 +5918,7 @@
     callEndBtn.addEventListener('click', () => {
       stopCallSounds();
       playCallEnded();
-      const targetUid = activeCallRole === 'caller' ? activePartnerUid : currentCallData?.callerUid;
+      const targetUid = currentCallPartnerUid || (activeCallRole === 'caller' ? activePartnerUid : currentCallData?.callerUid);
       if (targetUid) {
         sendWS('CALL_SIGNAL', {
           targetUid: targetUid,
@@ -5934,7 +5970,7 @@
               peerConnection.addTrack(screenTrack, screenStream);
               const offer = await peerConnection.createOffer();
               await peerConnection.setLocalDescription(offer);
-              const targetUid = activeCallRole === 'caller' ? activePartnerUid : currentCallData?.callerUid;
+              const targetUid = currentCallPartnerUid || (activeCallRole === 'caller' ? activePartnerUid : currentCallData?.callerUid);
               if (targetUid) {
                 sendWS('CALL_SIGNAL', {
                   targetUid: targetUid,
@@ -6006,7 +6042,7 @@
         localStream = null;
       }
       if (peerConnection) {
-        peerConnection.close();
+        try { peerConnection.close(); } catch (e) {}
         peerConnection = null;
       }
       if (localVideoEl) localVideoEl.srcObject = null;
@@ -6022,6 +6058,7 @@
       activeCallId = null;
       currentCallData = null;
       activeCallRole = null;
+      currentCallPartnerUid = null;
       isMicMuted = false;
       isCamDisabled = false;
       isScreenSharing = false;

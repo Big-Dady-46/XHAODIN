@@ -4271,14 +4271,44 @@
     let currentTtsUtterance = null;
     let activeTtsButton = null;
 
+    function normalizeRomanUrduPhonetics(text) {
+      if (!text) return '';
+      let res = text;
+      const dict = {
+        '\\bnhi\\b': 'nahi',
+        '\\bkese\\b': 'kaise',
+        '\\bthik\\b': 'theek',
+        '\\bkr\\b': 'kar',
+        '\\brha\\b': 'raha',
+        '\\brhi\\b': 'rahi',
+        '\\brhe\\b': 'rahe',
+        '\\baj\\b': 'aaj',
+        '\\bbta\\b': 'batao',
+        '\\bbtaye\\b': 'bataiye',
+        '\\bshukria\\b': 'shukriya',
+        '\\bkia\\b': 'kya',
+        '\\bmuje\\b': 'mujhe',
+        '\\btm\\b': 'tum',
+        '\\bap\\b': 'aap',
+        '\\bkb\\b': 'kab',
+        '\\bsb\\b': 'sab',
+        '\\byr\\b': 'yaar',
+        '\\bby\\b': 'bye'
+      };
+      for (let pattern in dict) {
+        res = res.replace(new RegExp(pattern, 'gi'), dict[pattern]);
+      }
+      return res;
+    }
+
     window.speakMessageText = function(btnEl, text, e) {
       if (e) {
         try { e.preventDefault(); e.stopPropagation(); } catch(err) {}
       }
       if (!text || typeof text !== 'string' || !text.trim()) return;
 
-      // Clean raw text (strip markdown symbols, HTML tags, excess emojis)
-      const cleanText = text
+      // Clean raw text
+      let cleanText = text
         .replace(/<[^>]*>/g, ' ')
         .replace(/[*_~`#\[\]\(\)]/g, ' ')
         .replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}]/gu, '')
@@ -4287,18 +4317,25 @@
 
       if (!cleanText) return;
 
-      // Stop any existing audio or speech synthesis
+      // If already playing audio for THIS button, toggle stop
+      if (window._currentTtsAudio && !window._currentTtsAudio.paused && activeTtsButton === btnEl) {
+        window._currentTtsAudio.pause();
+        window._currentTtsAudio = null;
+        resetTtsButtonState();
+        return;
+      }
+      if ('speechSynthesis' in window && window.speechSynthesis.speaking && activeTtsButton === btnEl) {
+        window.speechSynthesis.cancel();
+        resetTtsButtonState();
+        return;
+      }
+
+      // Stop any other active audio
       if (window._currentTtsAudio) {
         try { window._currentTtsAudio.pause(); window._currentTtsAudio = null; } catch(err) {}
       }
       if ('speechSynthesis' in window) {
-        if (window.speechSynthesis.speaking && activeTtsButton === btnEl) {
-          window.speechSynthesis.cancel();
-          resetTtsButtonState();
-          return;
-        }
         window.speechSynthesis.cancel();
-        try { window.speechSynthesis.resume(); } catch(e) {}
       }
       resetTtsButtonState();
 
@@ -4308,8 +4345,10 @@
         btnEl.setAttribute('title', 'Click to stop reading');
       }
 
-      // Check for Urdu script (Perso-Arabic Unicode: U+0600 - U+06FF)
       const isUrduScript = /[\u0600-\u06FF]/.test(cleanText);
+
+      // Normalize Roman Urdu phonetics for natural speech
+      const normalizedText = isUrduScript ? cleanText : normalizeRomanUrduPhonetics(cleanText);
 
       // Common Roman Urdu keywords
       const romanUrduWords = [
@@ -4319,95 +4358,84 @@
         'batao', 'bataiye', 'suno', 'yar', 'yaar', 'accha', 'acha', 'shukriya', 'karna', 
         'raha', 'rahi', 'rahe', 'gaya', 'gayi', 'aao', 'baat', 'bolo', 'sunao', 'shuru', 
         'khatam', 'muje', 'mujhe', 'hum', 'woh', 'ye', 'yeh', 'wala', 'wali', 'wale',
-        'kuch', 'pehle', 'kharab', 'kaam', 'rha', 'rahe', 'sirf', 'shukria', 'kia', 'by'
+        'kuch', 'pehle', 'kharab', 'kaam', 'rha', 'rahe', 'sirf', 'shukria', 'kia', 'bye'
       ];
-      
       const lowerClean = cleanText.toLowerCase();
       const tokens = lowerClean.split(/[^a-z0-9]+/);
       const isRomanUrdu = tokens.some(t => romanUrduWords.includes(t));
 
-      // Attempt Browser SpeechSynthesis API first
-      if ('speechSynthesis' in window) {
-        try {
-          const utterance = new SpeechSynthesisUtterance(cleanText);
-          currentTtsUtterance = utterance;
-          const voices = window.speechSynthesis.getVoices() || [];
+      const voiceChoice = (isUrduScript || isRomanUrdu) ? 'Aditi' : 'Brian';
 
-          let selectedVoice = null;
-          if (voices.length > 0) {
-            if (isUrduScript) {
-              selectedVoice = voices.find(v => v.lang.startsWith('ur') || v.lang.includes('PK') || v.lang.startsWith('hi') || v.lang.startsWith('ar'));
-            } else if (isRomanUrdu) {
-              selectedVoice = voices.find(v => v.lang === 'hi-IN' || v.lang.startsWith('hi') || v.lang === 'ur-PK' || v.lang === 'en-IN' || (v.name && v.name.toLowerCase().includes('india')) || (v.name && v.name.toLowerCase().includes('hindi')));
-            }
-            
-            // Fallback to English/Default installed voice
-            if (!selectedVoice) {
-              selectedVoice = voices.find(v => (v.lang.startsWith('en') && (v.name.includes('Natural') || v.name.includes('Google') || v.name.includes('Zira') || v.name.includes('David') || v.default))) || voices.find(v => v.lang.startsWith('en')) || voices[0];
-            }
-          }
-
-          if (selectedVoice) {
-            utterance.voice = selectedVoice;
-            utterance.lang = selectedVoice.lang || 'en-US';
-          } else {
-            // NEVER set unsupported lang code if no matching voice exists
-            utterance.lang = 'en-US';
-          }
-
-          utterance.rate = 0.95;
-          utterance.pitch = 1.0;
-          utterance.volume = 1.0;
-
-          let didSpeak = false;
-          utterance.onstart = () => { didSpeak = true; };
-          utterance.onend = () => { resetTtsButtonState(); };
-          utterance.onerror = (err) => {
-            console.warn('SpeechSynthesis error, switching to neural audio stream:', err);
-            resetTtsButtonState();
-            playOnlineTtsFallback(cleanText, isUrduScript || isRomanUrdu ? 'Aditi' : 'Brian', btnEl);
-          };
-
-          try { window.speechSynthesis.resume(); } catch(e) {}
-          window.speechSynthesis.speak(utterance);
-
-          // Safety check: if SpeechSynthesis fails silently and does not start within 1.2s, play neural audio stream
-          setTimeout(() => {
-            if (!didSpeak && !window.speechSynthesis.speaking && activeTtsButton === btnEl) {
-              playOnlineTtsFallback(cleanText, isUrduScript || isRomanUrdu ? 'Aditi' : 'Brian', btnEl);
-            }
-          }, 1200);
-
-          return;
-        } catch (err) {
-          console.warn('SpeechSynthesis error:', err);
-        }
-      }
-
-      // Fallback directly to high quality neural voice stream
-      playOnlineTtsFallback(cleanText, isUrduScript || isRomanUrdu ? 'Aditi' : 'Brian', btnEl);
-    };
-
-    function playOnlineTtsFallback(text, voiceName, btnEl) {
+      // 1. PRIMARY: Studio-Quality Neural Voice Stream (Flawless Pakistani/Indian & English pronunciation)
       try {
-        if (btnEl) {
-          activeTtsButton = btnEl;
-          btnEl.classList.add('tts-speaking');
-        }
-        const encoded = encodeURIComponent(text.substring(0, 200));
-        // StreamElements Neural TTS (CORS enabled, highly reliable, authentic accents)
-        const audioUrl = `https://api.streamelements.com/kappa/v2/speech?voice=${voiceName || 'Aditi'}&text=${encoded}`;
+        const encoded = encodeURIComponent(normalizedText.substring(0, 250));
+        const audioUrl = `https://api.streamelements.com/kappa/v2/speech?voice=${voiceChoice}&text=${encoded}`;
         const audio = new Audio(audioUrl);
         window._currentTtsAudio = audio;
+
         audio.onended = () => resetTtsButtonState();
-        audio.onerror = () => resetTtsButtonState();
-        audio.play().catch(e => {
-          console.warn('Audio play error:', e);
-          resetTtsButtonState();
-        });
-      } catch(e) {
+        audio.onerror = (err) => {
+          console.warn('Neural audio stream failed, falling back to Web Speech Synthesis:', err);
+          fallbackToSpeechSynthesis(cleanText, isUrduScript, isRomanUrdu);
+        };
+
+        const playPromise = audio.play();
+        if (playPromise !== undefined) {
+          playPromise.catch(err => {
+            console.warn('Audio play prevented, using fallback:', err);
+            fallbackToSpeechSynthesis(cleanText, isUrduScript, isRomanUrdu);
+          });
+        }
+      } catch (err) {
+        fallbackToSpeechSynthesis(cleanText, isUrduScript, isRomanUrdu);
+      }
+    };
+
+    function fallbackToSpeechSynthesis(text, isUrduScript, isRomanUrdu) {
+      if (!('speechSynthesis' in window)) {
+        resetTtsButtonState();
+        return;
+      }
+      try {
+        window.speechSynthesis.cancel();
+        try { window.speechSynthesis.resume(); } catch(e) {}
+        const utterance = new SpeechSynthesisUtterance(text);
+        currentTtsUtterance = utterance;
+        const voices = window.speechSynthesis.getVoices() || [];
+        let matchedVoice = null;
+        if (voices.length > 0) {
+          if (isUrduScript) {
+            matchedVoice = voices.find(v => v.lang.startsWith('ur') || v.lang.includes('PK') || v.lang.startsWith('hi'));
+          } else if (isRomanUrdu) {
+            matchedVoice = voices.find(v => v.lang === 'hi-IN' || v.lang.startsWith('hi') || v.lang === 'ur-PK' || (v.name && v.name.toLowerCase().includes('india')));
+          }
+          if (!matchedVoice) {
+            matchedVoice = voices.find(v => (v.lang.startsWith('en') && (v.name.includes('Natural') || v.name.includes('Google') || v.default))) || voices[0];
+          }
+        }
+        if (matchedVoice) {
+          utterance.voice = matchedVoice;
+          utterance.lang = matchedVoice.lang || 'en-US';
+        } else {
+          utterance.lang = 'en-US';
+        }
+        utterance.rate = 0.95;
+        utterance.pitch = 1.0;
+        utterance.onend = () => resetTtsButtonState();
+        utterance.onerror = () => resetTtsButtonState();
+        window.speechSynthesis.speak(utterance);
+      } catch(err) {
         resetTtsButtonState();
       }
+    }
+
+    function resetTtsButtonState() {
+      if (activeTtsButton) {
+        activeTtsButton.classList.remove('tts-speaking');
+        activeTtsButton.setAttribute('title', 'Listen / Read aloud');
+        activeTtsButton = null;
+      }
+      currentTtsUtterance = null;
     }
 
     function resetTtsButtonState() {

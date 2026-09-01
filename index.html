@@ -4266,104 +4266,93 @@
 
     // ----------------------------------------------------------------------
     // Smart Multilingual Text-to-Speech (TTS) Engine
-    // Supports Roman Punjabi, Roman Urdu, Urdu Script & English (Female Voice Only)
+    // 1. Analyzes Language (Urdu Script, Roman Punjabi, Roman Urdu, English)
+    // 2. Transliterates phonetically for native Desi & Punjabi pronunciation
+    // 3. Speaks in pure Sweet Girl (Female) Voice
     // ----------------------------------------------------------------------
     let currentTtsUtterance = null;
     let activeTtsButton = null;
 
-    function normalizeRomanUrduPhonetics(text) {
-      if (!text) return '';
-      let res = text;
-      const dict = {
-        // Punjabi expressions & phrases
-        '\\bki haal ae\\b': 'kee haal hai',
-        '\\bki hal ae\\b': 'kee haal hai',
-        '\\bki haal\\b': 'kee haal',
-        '\\bki hal\\b': 'kee haal',
-        '\\bkiven ho\\b': 'keeven ho',
-        '\\bkive ho\\b': 'keeven ho',
-        '\\bkiven\\b': 'keeven',
-        '\\bkive\\b': 'keeven',
-        '\\bkiddan\\b': 'kiddaan',
-        '\\bkidaan\\b': 'kiddaan',
-        '\\bpaaji\\b': 'paaji',
-        '\\bpaji\\b': 'paaji',
-        '\\bbhaji\\b': 'bhaaji',
-        '\\bveere\\b': 'veere',
-        '\\bveer\\b': 'veer',
-        '\\btussi\\b': 'tussi',
-        '\\btusi\\b': 'tussi',
-        '\\bsaada\\b': 'saada',
-        '\\bsaade\\b': 'saaday',
-        '\\btwaada\\b': 'tuhaada',
-        '\\btwada\\b': 'tuhaada',
-        '\\bthwada\\b': 'tuhaada',
-        '\\bchanga\\b': 'changaa',
-        '\\bchange\\b': 'changay',
-        '\\bchangi\\b': 'changee',
-        '\\bsohna\\b': 'sohnaa',
-        '\\bsohni\\b': 'sohnee',
-        '\\bsohne\\b': 'sohnay',
-        '\\bkithy\\b': 'kithay',
-        '\\bkithe\\b': 'kithay',
-        '\\bjithe\\b': 'jithay',
-        '\\bjithy\\b': 'jithay',
-        '\\baaho\\b': 'aaho',
-        '\\baho\\b': 'aaho',
-        '\\bgall\\b': 'gaal',
-        '\\bgal\\b': 'gaal',
-        '\\bdasso\\b': 'dasso',
-        '\\bdaso\\b': 'dasso',
-        '\\bvadia\\b': 'vadiya',
-        '\\bvadiya\\b': 'vadiya',
-        '\\bhor\\b': 'hor',
-        '\\brab rakha\\b': 'rabb raakhaa',
-        '\\bkar reha\\b': 'kar rehaa',
-        '\\bkr reha\\b': 'kar rehaa',
-        '\\bkar rehi\\b': 'kar rahee',
-        '\\bkr rehi\\b': 'kar rahee',
-        '\\bkr rha\\b': 'kar rahaa',
-        '\\bkr rhi\\b': 'kar rahee',
-        '\\bkr rhe\\b': 'kar rahay',
-        '\\bkar rahe\\b': 'kar rahay',
-        '\\bkehna\\b': 'kehnaa',
-        '\\bkehnda\\b': 'kehndaa',
-        '\\bkehndi\\b': 'kehndee',
-        '\\bhove\\b': 'hovay',
-        '\\bhovay\\b': 'hovay',
-        '\\bchaliye\\b': 'chaliye',
-        '\\baao ji\\b': 'aao jee',
+    // Comprehensive Dictionary for Punjabi & Urdu to Indic Phonetics
+    const indicDictionary = {
+      // Punjabi
+      'ki': 'की', 'haal': 'हाल', 'hal': 'हाल', 'ae': 'ऐ', 'kiven': 'किंवें', 'kive': 'किंवें',
+      'kiddan': 'किद्दान', 'kidaan': 'किद्दान', 'paaji': 'पाजी', 'paji': 'पाजी', 'bhaji': 'भाजी',
+      'veere': 'वीरे', 'veer': 'वीर', 'tussi': 'तुस्सी', 'tusi': 'तुस्सी', 'saada': 'साडा',
+      'saade': 'साडे', 'sada': 'साडा', 'twaada': 'तुहाडा', 'twada': 'तुहाडा', 'thwada': 'तुहाडा',
+      'changa': 'चंगा', 'change': 'चंगे', 'changi': 'चंगी', 'sohna': 'सोहणा', 'sohni': 'सोहणी',
+      'sohne': 'सोहणे', 'kithy': 'किथे', 'kithe': 'किथे', 'kithay': 'किथे', 'jithe': 'जिथे',
+      'jithay': 'जिथे', 'aaho': 'आहो', 'aho': 'आहो', 'gall': 'गल्ल', 'gal': 'गल्ल',
+      'dasso': 'दस्सो', 'daso': 'दस्सो', 'vadia': 'वधिया', 'vadiya': 'वधिया', 'hor': 'होर',
+      'rab': 'रब', 'rakha': 'राखा', 'reha': 'रहा', 'rehi': 'रही', 'kehnda': 'कहंदा',
+      'kehndi': 'कहंदी', 'hovay': 'होवे', 'hove': 'होवे', 'chaliye': 'चलिए', 'kamm': 'कम्म',
+      'kudi': 'कुड़ी', 'munda': 'मुंडा', 'pind': 'पिंड',
 
-        // Roman Urdu common words & shortcuts
-        '\\bnhi\\b': 'nahi',
-        '\\bnai\\b': 'nahi',
-        '\\bkese\\b': 'kaise',
-        '\\bthik\\b': 'theek',
-        '\\bkr\\b': 'kar',
-        '\\brha\\b': 'raha',
-        '\\brhi\\b': 'rahi',
-        '\\brhe\\b': 'rahe',
-        '\\baj\\b': 'aaj',
-        '\\bbta\\b': 'batao',
-        '\\bbtao\\b': 'batao',
-        '\\bbtaye\\b': 'bataiye',
-        '\\bshukria\\b': 'shukriya',
-        '\\bshukriya\\b': 'shukriya',
-        '\\bmeharbani\\b': 'meherbaani',
-        '\\bkia\\b': 'kya',
-        '\\bmuje\\b': 'mujhe',
-        '\\btm\\b': 'tum',
-        '\\bap\\b': 'aap',
-        '\\bkb\\b': 'kab',
-        '\\bsb\\b': 'sab',
-        '\\byr\\b': 'yaar',
-        '\\bby\\b': 'bye',
-        '\\bae\\b': 'hai'
-      };
-      for (let pattern in dict) {
-        res = res.replace(new RegExp(pattern, 'gi'), dict[pattern]);
+      // Urdu & Hindi
+      'kya': 'क्या', 'hai': 'है', 'hain': 'हैं', 'kaise': 'कैसे', 'kese': 'कैसे', 'karo': 'करो',
+      'kar': 'कर', 'karne': 'करने', 'karna': 'करना', 'bhai': 'भाई', 'bhaiya': 'भैया', 'mai': 'मैं',
+      'main': 'मैं', 'mera': 'मेरा', 'meri': 'मेरी', 'mere': 'मेरे', 'tum': 'तुम', 'tm': 'तुम',
+      'aap': 'आप', 'ap': 'आप', 'apna': 'अपना', 'apni': 'अपनी', 'apne': 'अपने', 'theek': 'ठीक',
+      'thik': 'ठीक', 'nahi': 'नहीं', 'nhi': 'नहीं', 'nai': 'नहीं', 'haan': 'हाँ', 'han': 'हाँ',
+      'aj': 'आज', 'aaj': 'आज', 'kal': 'कल', 'sab': 'सब', 'sb': 'सब', 'hoga': 'होगा', 'hogi': 'होगी',
+      'batao': 'बताओ', 'bta': 'बताओ', 'btao': 'बताओ', 'bataiye': 'बताइए', 'btaye': 'बताइए',
+      'suno': 'सुनो', 'sunao': 'सुनाओ', 'yar': 'यार', 'yaar': 'यार', 'yr': 'यार', 'accha': 'अच्छा',
+      'acha': 'अच्छा', 'shukriya': 'शुक्रिया', 'shukria': 'शुक्रिया', 'meharbani': 'मेहरबानी',
+      'raha': 'रहा', 'rha': 'रहा', 'rahi': 'रही', 'rhi': 'रही', 'rahe': 'रहे', 'rhe': 'रहे',
+      'gaya': 'गया', 'gayi': 'गयी', 'gaye': 'गए', 'aao': 'आओ', 'baat': 'बात', 'bolo': 'बोलो',
+      'shuru': 'शुरू', 'khatam': 'खत्म', 'muje': 'मुझे', 'mujhe': 'मुझे', 'hum': 'हम',
+      'woh': 'वो', 'wo': 'वो', 'ye': 'ये', 'yeh': 'ये', 'wala': 'वाला', 'wali': 'वाली',
+      'wale': 'वाले', 'kuch': 'कुछ', 'kujh': 'कुछ', 'pehle': 'पहले', 'kharab': 'खराब',
+      'kaam': 'काम', 'sirf': 'सिर्फ', 'kia': 'किया', 'kiya': 'किया', 'kyu': 'क्यों',
+      'kyun': 'क्यों', 'kaun': 'कौन', 'kab': 'कब', 'kb': 'कब', 'kaha': 'कहाँ', 'kahan': 'कहाँ',
+      'khuda': 'खुदा', 'hafiz': 'हाफ़िज़', 'allah': 'अल्लाह', 'salam': 'सलाम', 'namaste': 'नमस्ते',
+      'shabash': 'शाबाश', 'zindabad': 'जिंदाबाद', 'by': 'बाय', 'bye': 'बाय', 'ok': 'ओके', 'hello': 'हेलो', 'hi': 'हाय'
+    };
+
+    function analyzeAndTransliterate(text) {
+      if (!text) return { lang: 'english', text: '', voice: 'Joanna' };
+
+      // 1. Urdu / Arabic script
+      if (/[\u0600-\u06FF]/.test(text)) {
+        return { lang: 'urdu_script', text: text, voice: 'Aditi' };
       }
-      return res;
+
+      // 2. Hindi / Devanagari script
+      if (/[\u0900-\u097F]/.test(text)) {
+        return { lang: 'hindi_script', text: text, voice: 'Aditi' };
+      }
+
+      const words = text.split(/(\s+|[.,!?'"()]+)/);
+      let punjabiHits = 0;
+      let urduHits = 0;
+      let convertedTokens = [];
+
+      for (let token of words) {
+        if (/^\s+$/.test(token) || /^[.,!?'"()]+$/.test(token)) {
+          convertedTokens.push(token);
+          continue;
+        }
+        const lower = token.toLowerCase();
+        if (indicDictionary[lower]) {
+          convertedTokens.push(indicDictionary[lower]);
+          if (['ki', 'ae', 'kiven', 'kiddan', 'paaji', 'veere', 'tussi', 'saada', 'twaada', 'changa', 'sohna', 'kithe', 'kithy', 'dasso', 'aaho', 'gall', 'vadia', 'hor'].includes(lower)) {
+            punjabiHits++;
+          } else {
+            urduHits++;
+          }
+        } else {
+          convertedTokens.push(token);
+        }
+      }
+
+      const totalHits = punjabiHits + urduHits;
+      if (totalHits > 0) {
+        const lang = punjabiHits > 0 ? 'roman_punjabi' : 'roman_urdu';
+        return { lang: lang, text: convertedTokens.join(''), voice: 'Aditi' };
+      }
+
+      // Check pure English
+      return { lang: 'english', text: text, voice: 'Joanna' };
     }
 
     window.speakMessageText = function(btnEl, text, e) {
@@ -4382,7 +4371,7 @@
 
       if (!cleanText) return;
 
-      // If already playing audio for THIS button, toggle stop
+      // Toggle stop if already playing THIS message
       if (window._currentTtsAudio && !window._currentTtsAudio.paused && activeTtsButton === btnEl) {
         window._currentTtsAudio.pause();
         window._currentTtsAudio = null;
@@ -4410,41 +4399,35 @@
         btnEl.setAttribute('title', 'Click to stop reading');
       }
 
-      const isUrduScript = /[\u0600-\u06FF]/.test(cleanText);
+      // 1. Analyze language & transliterate
+      const analyzed = analyzeAndTransliterate(cleanText);
 
-      // Normalize Roman Punjabi & Roman Urdu phonetics for natural speech
-      const normalizedText = isUrduScript ? cleanText : normalizeRomanUrduPhonetics(cleanText);
-
-      // Female Neural Voice: "Aditi" (Studio Quality South Asian Female Voice) or "Joanna" (English Female)
-      const isEnglishOnly = !isUrduScript && /^[a-zA-Z0-9\s.,!?'"()-]+$/.test(cleanText) && !/(haal|kiven|kiddan|paaji|veere|tussi|saada|twaada|changa|sohna|kithy|kithe|dasso|aaho|rha|rhi|rhe|nhi|theek|thik|bhai|yaar|kar|karo|batao|shukriya|mujhe|aaj|aao|gal|gall|vadia|hor|rab)/i.test(cleanText);
-      const femaleVoice = isEnglishOnly ? 'Joanna' : 'Aditi';
-
-      // 1. PRIMARY: High-Definition Neural Female Voice Stream (Aditi / Joanna)
+      // 2. High-Definition Neural Female Voice Stream (Aditi / Joanna)
       try {
-        const encoded = encodeURIComponent(normalizedText.substring(0, 250));
-        const audioUrl = `https://api.streamelements.com/kappa/v2/speech?voice=${femaleVoice}&text=${encoded}`;
+        const encoded = encodeURIComponent(analyzed.text.substring(0, 250));
+        const audioUrl = `https://api.streamelements.com/kappa/v2/speech?voice=${analyzed.voice}&text=${encoded}`;
         const audio = new Audio(audioUrl);
         window._currentTtsAudio = audio;
 
         audio.onended = () => resetTtsButtonState();
         audio.onerror = (err) => {
           console.warn('Neural audio stream failed, falling back to Web Speech Synthesis:', err);
-          fallbackToSpeechSynthesis(normalizedText, isUrduScript);
+          fallbackToSpeechSynthesis(analyzed.text, analyzed.lang);
         };
 
         const playPromise = audio.play();
         if (playPromise !== undefined) {
           playPromise.catch(err => {
             console.warn('Audio play prevented, using fallback:', err);
-            fallbackToSpeechSynthesis(normalizedText, isUrduScript);
+            fallbackToSpeechSynthesis(analyzed.text, analyzed.lang);
           });
         }
       } catch (err) {
-        fallbackToSpeechSynthesis(normalizedText, isUrduScript);
+        fallbackToSpeechSynthesis(analyzed.text, analyzed.lang);
       }
     };
 
-    function fallbackToSpeechSynthesis(text, isUrduScript) {
+    function fallbackToSpeechSynthesis(text, lang) {
       if (!('speechSynthesis' in window)) {
         resetTtsButtonState();
         return;
@@ -4458,7 +4441,6 @@
         
         let matchedVoice = null;
         if (voices.length > 0) {
-          // Select Female voices
           const femaleVoices = voices.filter(v => {
             const name = v.name.toLowerCase();
             return name.includes('female') || name.includes('zira') || name.includes('aditi') || name.includes('raveena') || name.includes('heera') || name.includes('kalpana') || name.includes('swara') || name.includes('samantha') || name.includes('victoria') || name.includes('karen') || name.includes('salli') || name.includes('joanna');
@@ -4478,7 +4460,7 @@
           utterance.lang = 'en-US';
         }
 
-        utterance.pitch = 1.15; // Slightly higher pitch for clear sweet female voice
+        utterance.pitch = 1.15;
         utterance.rate = 0.95;
         utterance.onend = () => resetTtsButtonState();
         utterance.onerror = () => resetTtsButtonState();
@@ -4495,13 +4477,6 @@
         activeTtsButton = null;
       }
       currentTtsUtterance = null;
-    }
-
-    // Pre-populate voices on load
-    if ('speechSynthesis' in window) {
-      window.speechSynthesis.onvoiceschanged = () => {
-        window.speechSynthesis.getVoices();
-      };
     }
 
     // Pre-populate voices on load

@@ -2671,10 +2671,10 @@
 
     // --- Core Action Dispatcher (Direct to Firebase RTDB) ---
     function sendWS(type, data) {
-      if (!currentUser) return;
+      if (!type) return;
       switch (type) {
         case 'SEND_MESSAGE':
-          if (data && data.chatId && data.message) {
+          if (data && data.chatId && data.message && fbDb) {
             firebaseWrite('messages/' + data.chatId + '/' + data.message.id, data.message);
             if (data.message.senderId === 'xhaodin_ai_bot' || (data.chatId.includes('xhaodin_ai_bot') && data.message.senderId !== 'xhaodin_ai_bot')) {
               setTimeout(function() { generateAIResponse(data.chatId, data.message); }, 800 + Math.random() * 1200);
@@ -4657,38 +4657,39 @@
     };
 
     function sendMessage(text, mediaType = 'text', mediaUrl = null) {
-      if ((!text.trim() && !mediaUrl) || !activeChatId) return;
+      if ((!text || !text.trim()) && !mediaUrl) return;
+      if (!activeChatId) return;
 
       const now = new Date();
       const timeString = formatTime(now);
       const senderId = currentUser ? currentUser.uid : 'user_' + Date.now();
-      const senderName = currentUser ? (currentUser.displayName || currentUser.username || 'You') : 'You';
+      const senderName = currentUser ? (currentUser.displayName || currentUser.username || currentUser.email?.split('@')[0] || 'You') : 'You';
       const isSmsChat = activeChatId.startsWith('sms_') || (activePartnerUid && (activePartnerUid.startsWith('sms_') || usersMap[activePartnerUid]?.isSmsContact));
 
-      const newMsg = {
-        id: 'msg_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+      const cleanMsg = {
+        id: 'msg_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
         senderId: senderId,
         senderName: senderName,
-        text: text.trim(),
-        mediaType: mediaType,
-        mediaUrl: mediaUrl,
-        replyTo: activeReplyTo ? { ...activeReplyTo } : null,
+        text: (text || '').trim(),
+        mediaType: mediaType || 'text',
         time: timeString,
         timestamp: Date.now(),
-        status: 'sent',
-        isSms: isSmsChat,
-        reactions: {},
-        starredBy: []
+        status: 'sent'
       };
 
+      if (mediaUrl) cleanMsg.mediaUrl = mediaUrl;
+      if (activeReplyTo) cleanMsg.replyTo = { ...activeReplyTo };
+      if (isSmsChat) cleanMsg.isSms = true;
+
       if (!messagesDb[activeChatId]) messagesDb[activeChatId] = [];
-      messagesDb[activeChatId].push(newMsg);
+      messagesDb[activeChatId].push(cleanMsg);
       saveLocalData();
 
-      sendWS('SEND_MESSAGE', { chatId: activeChatId, message: newMsg });
+      // Dispatch to Firebase Realtime DB
+      sendWS('SEND_MESSAGE', { chatId: activeChatId, message: cleanMsg });
 
       // Outbound Cellular SMS Bridge Dispatch
-      if (isSmsChat && text.trim()) {
+      if (isSmsChat && text && text.trim()) {
         const targetPhone = usersMap[activePartnerUid]?.phoneNumber || activePartnerUid?.replace('sms_', '') || activeChatId.replace('sms_', '');
         fetch('/api/sms/send', {
           method: 'POST',
@@ -4696,8 +4697,8 @@
           body: JSON.stringify({
             to: targetPhone,
             message: text.trim(),
-            fromUserId: currentUser?.uid || 'web_user',
-            fromUserName: currentUser?.displayName || 'Web User',
+            fromUserId: senderId,
+            fromUserName: senderName,
             chatId: activeChatId,
             customGatewayUrl: localStorage.getItem('xhaodin_sms_gateway_url') || '',
             twilioSid: localStorage.getItem('xhaodin_twilio_sid') || '',
@@ -4713,8 +4714,8 @@
 
       sendWS('TYPING_SIGNAL', {
         chatId: activeChatId,
-        senderUid: currentUser.uid,
-        senderName: currentUser.displayName,
+        senderUid: senderId,
+        senderName: senderName,
         isTyping: false
       });
 

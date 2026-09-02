@@ -2751,9 +2751,9 @@
     }
 
     function initFirebaseListeners() {
-      if (firebaseReady) return;
-      firebaseReady = true;
-      if (!currentUser) return;
+      if (!currentUser || !currentUser.uid) return;
+      if (firebaseReady === currentUser.uid) return;
+      firebaseReady = currentUser.uid;
 
       // 1. Live Users Sync - Realtime Firebase users
       fbDb.ref('users').on('value', snap => {
@@ -2811,7 +2811,7 @@
         const myUid = currentUser ? currentUser.uid : '';
         const updatedDb = {};
         Object.keys(allMsgs).forEach(chatId => {
-          if (chatId.includes(myUid) || chatId.startsWith('group_') || chatId.startsWith('sms_')) {
+          if (!myUid || chatId.includes(myUid) || chatId.startsWith('group_') || chatId.startsWith('sms_')) {
             const rawChatMsgs = allMsgs[chatId];
             if (rawChatMsgs && typeof rawChatMsgs === 'object') {
               const list = Array.isArray(rawChatMsgs) ? rawChatMsgs : Object.values(rawChatMsgs);

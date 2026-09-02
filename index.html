@@ -5039,6 +5039,8 @@
           body: JSON.stringify({
             to: targetPhone,
             message: text.trim(),
+            messageId: cleanMsg.id,
+            skipFirebaseWrite: true,
             fromUserId: senderId,
             fromUserName: senderName,
             chatId: activeChatId,

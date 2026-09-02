@@ -108,8 +108,8 @@ export default async function handler(req, res) {
       }
     }
 
-    // 3. Write Outbound Message Record to Firebase RTDB
-    const msgId = `msg_out_${now}_${Math.random().toString(36).substring(2, 6)}`;
+    // 3. Write Outbound Message Record to Firebase RTDB (only if not already saved by client)
+    const msgId = body.messageId || `msg_out_${now}_${Math.random().toString(36).substring(2, 6)}`;
     const msgPayload = {
       id: msgId,
       text: message,
@@ -124,11 +124,13 @@ export default async function handler(req, res) {
       gatewayInfo: gatewayResult
     };
 
-    await fetch(`${FIREBASE_DB_URL}/messages/${activeChatId}/${msgId}.json`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(msgPayload)
-    });
+    if (!body.skipFirebaseWrite) {
+      await fetch(`${FIREBASE_DB_URL}/messages/${activeChatId}/${msgId}.json`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(msgPayload)
+      });
+    }
 
     return res.status(200).json({
       success: true,

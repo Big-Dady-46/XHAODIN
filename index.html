@@ -302,6 +302,13 @@
             </svg>
             <span id="railAdminBadge" class="hidden absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-amber-500 text-[#06090c] text-[10px] font-bold flex items-center justify-center shadow-lg shadow-amber-500/40">0</span>
           </div>
+          <!-- 6. Nokia & Cellular SMS Hub -->
+          <div id="navRailSmsBtn" title="Nokia Cellular SMS Hub (3 Channels)" class="nav-rail-item text-amber-400 hover:text-amber-300 relative cursor-pointer" onclick="openNokiaSmsHubModal()">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"/>
+            </svg>
+            <span class="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-amber-400 ring-2 ring-[#0b1115] animate-pulse"></span>
+          </div>
         </div>
 
         <!-- Bottom App Icons -->
@@ -612,6 +619,16 @@
               <span id="mobAdminBadge" class="hidden absolute -top-1 -right-1 min-w-[16px] h-[16px] px-1 rounded-full bg-amber-500 text-[#06090c] text-[9px] font-bold flex items-center justify-center">0</span>
             </div>
             <span>Admin</span>
+            <span class="mobile-nav-dot"></span>
+          </div>
+          <div id="mobNavSmsBtn" class="mobile-nav-item text-amber-400" title="Nokia SMS Hub" onclick="openNokiaSmsHubModal()">
+            <div class="relative">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"/>
+              </svg>
+              <span class="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+            </div>
+            <span>SMS Hub</span>
             <span class="mobile-nav-dot"></span>
           </div>
           <div id="mobNavCallsBtn" class="mobile-nav-item" title="Calls">
@@ -1452,6 +1469,243 @@
             Back to Sign In
           </button>
         </div>
+      </div>
+    </div>
+
+    <!-- ==================================================================== -->
+    <!-- 📱 NOKIA & CELLULAR 2-WAY SMS HUB & GATEWAY MANAGER MODAL            -->
+    <!-- 3 Dedicated Routing Channels (AI Assistant, VIP Direct, Squad Group)  -->
+    <!-- ==================================================================== -->
+    <div id="nokiaSmsHubModal" class="fixed inset-0 z-[70] bg-black/85 backdrop-blur-xl hidden items-center justify-center p-3 sm:p-4 select-none animate-fade-in overflow-y-auto">
+      <div class="bg-[#10191f] text-[#f8fafc] w-full max-w-2xl rounded-3xl border border-amber-500/40 p-6 sm:p-8 shadow-[0_25px_70px_rgba(0,0,0,0.8),0_0_40px_rgba(245,158,11,0.2)] flex flex-col relative max-h-[92vh] overflow-hidden my-auto">
+        
+        <!-- Ambient Top Glow -->
+        <div class="absolute -top-20 left-1/2 -translate-x-1/2 w-72 h-32 bg-amber-500/15 rounded-full blur-3xl pointer-events-none"></div>
+
+        <!-- Modal Header -->
+        <div class="flex items-center justify-between pb-4 border-b border-white/10 mb-4 flex-shrink-0 relative z-10">
+          <div class="flex items-center gap-3.5">
+            <div class="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-500/20 via-amber-600/10 to-transparent text-amber-400 flex items-center justify-center border border-amber-400/40 shadow-lg shadow-amber-500/20 text-2xl flex-shrink-0">
+              📱
+            </div>
+            <div>
+              <div class="flex items-center gap-2">
+                <h3 class="text-base sm:text-lg font-bold text-[#f8fafc] font-heading tracking-tight">Nokia Cellular SMS Hub</h3>
+                <span class="text-[10px] bg-amber-500/20 text-amber-300 font-mono font-bold px-2 py-0.5 rounded-full border border-amber-400/30 uppercase">3 Channels Active</span>
+              </div>
+              <p class="text-xs text-[#94a3b8] mt-0.5">2-Way Cellular Bridge between Nokia Button Phones & On-Net Android/Web Chat</p>
+            </div>
+          </div>
+          <button id="closeNokiaSmsHubModalBtn" class="w-10 h-10 min-w-[44px] min-h-[44px] rounded-2xl bg-[#15222a] hover:bg-[#1b2d37] text-[#94a3b8] hover:text-white flex items-center justify-center transition text-sm font-bold flex-shrink-0">✕</button>
+        </div>
+
+        <!-- Scrollable Modal Body -->
+        <div class="flex-1 overflow-y-auto space-y-5 pr-1 custom-scrollbar">
+
+          <!-- 1. The 3 Dedicated Channel Numbers Status Cards -->
+          <div>
+            <div class="flex items-center justify-between mb-2.5">
+              <span class="text-xs font-bold text-amber-400 font-heading uppercase tracking-wider flex items-center gap-1.5">
+                <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                <span>3 Dedicated Routing Channels</span>
+              </span>
+              <span class="text-[11px] text-[#94a3b8] font-mono">SIM & Virtual Number Routes</span>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <!-- Channel 1: AI Bot -->
+              <div class="p-3.5 rounded-2xl bg-[#0b1115] border border-emerald-500/30 hover:border-emerald-400/60 transition flex flex-col justify-between group">
+                <div>
+                  <div class="flex items-center justify-between mb-1.5">
+                    <span class="text-xs font-bold text-emerald-400 font-heading flex items-center gap-1">
+                      <span>🤖 Channel 1</span>
+                    </span>
+                    <span class="text-[9px] bg-emerald-500/15 text-emerald-300 font-mono px-1.5 py-0.5 rounded uppercase">AI Bot</span>
+                  </div>
+                  <h4 id="smsChannel1DisplayNum" class="text-xs font-mono font-bold text-white mb-1">+1 (800) 555-0101</h4>
+                  <p class="text-[11px] text-[#94a3b8] leading-tight">Nokia sends SMS → AI Assistant generates smart answer & auto-replies via SMS.</p>
+                </div>
+                <button type="button" onclick="quickFillSmsSimulator('channel1_ai')" class="mt-2.5 w-full py-1.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 text-[11px] font-bold border border-emerald-500/30 transition">
+                  Test AI Route ⚡
+                </button>
+              </div>
+
+              <!-- Channel 2: Direct User VIP 1 -->
+              <div class="p-3.5 rounded-2xl bg-[#0b1115] border border-blue-500/30 hover:border-blue-400/60 transition flex flex-col justify-between group">
+                <div>
+                  <div class="flex items-center justify-between mb-1.5">
+                    <span class="text-xs font-bold text-blue-400 font-heading flex items-center gap-1">
+                      <span>👤 Channel 2</span>
+                    </span>
+                    <span class="text-[9px] bg-blue-500/15 text-blue-300 font-mono px-1.5 py-0.5 rounded uppercase">1-on-1 VIP</span>
+                  </div>
+                  <h4 id="smsChannel2DisplayNum" class="text-xs font-mono font-bold text-white mb-1">+1 (800) 555-0102</h4>
+                  <p class="text-[11px] text-[#94a3b8] leading-tight">Nokia sends SMS → Direct private chat with Android User A in real-time.</p>
+                </div>
+                <button type="button" onclick="quickFillSmsSimulator('channel2_user')" class="mt-2.5 w-full py-1.5 rounded-xl bg-blue-500/10 hover:bg-blue-500/20 text-blue-300 text-[11px] font-bold border border-blue-500/30 transition">
+                  Test Direct Route ⚡
+                </button>
+              </div>
+
+              <!-- Channel 3: Squad Group Broadcast -->
+              <div class="p-3.5 rounded-2xl bg-[#0b1115] border border-amber-500/30 hover:border-amber-400/60 transition flex flex-col justify-between group">
+                <div>
+                  <div class="flex items-center justify-between mb-1.5">
+                    <span class="text-xs font-bold text-amber-400 font-heading flex items-center gap-1">
+                      <span>👥 Channel 3</span>
+                    </span>
+                    <span class="text-[9px] bg-amber-500/15 text-amber-300 font-mono px-1.5 py-0.5 rounded uppercase">Squad</span>
+                  </div>
+                  <h4 id="smsChannel3DisplayNum" class="text-xs font-mono font-bold text-white mb-1">+1 (800) 555-0103</h4>
+                  <p class="text-[11px] text-[#94a3b8] leading-tight">Nokia sends SMS → Live broadcast to Squad Main Group chat room.</p>
+                </div>
+                <button type="button" onclick="quickFillSmsSimulator('channel3_group')" class="mt-2.5 w-full py-1.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 text-[11px] font-bold border border-amber-500/30 transition">
+                  Test Group Route ⚡
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- 2. Live Interactive Nokia SMS Simulator -->
+          <div class="p-4 sm:p-5 rounded-2xl bg-[#0b1115] border border-white/10 space-y-3.5">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <span class="text-base">🧪</span>
+                <h4 class="text-xs font-bold text-white font-heading uppercase tracking-wider">Live Nokia SMS Simulator</h4>
+              </div>
+              <span class="text-[10px] text-emerald-400 font-mono font-bold bg-emerald-500/15 px-2 py-0.5 rounded-full border border-emerald-500/30">Instant Live Test</span>
+            </div>
+
+            <form id="smsSimulatorForm" class="space-y-3">
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label class="block text-[11px] font-medium text-[#94a3b8] mb-1">Sender Nokia Mobile Number</label>
+                  <input type="text" id="simSenderPhone" value="+923001234567" required placeholder="+923001234567"
+                    class="w-full px-3.5 py-2.5 rounded-xl bg-[#10191f] border border-white/10 text-xs font-mono text-white focus:outline-none focus:border-amber-400 transition">
+                </div>
+
+                <div>
+                  <label class="block text-[11px] font-medium text-[#94a3b8] mb-1">Target Routing Channel</label>
+                  <select id="simTargetChannel" class="w-full px-3.5 py-2.5 rounded-xl bg-[#10191f] border border-white/10 text-xs text-white focus:outline-none focus:border-amber-400 transition">
+                    <option value="channel1_ai">🤖 Channel 1: AI Assistant (Auto SMS Reply)</option>
+                    <option value="channel2_user" selected>👤 Channel 2: Direct 1-on-1 VIP Chat</option>
+                    <option value="channel3_group">👥 Channel 3: Squad Main Group</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label class="block text-[11px] font-medium text-[#94a3b8] mb-1">SMS Text Message</label>
+                <div class="flex gap-2">
+                  <input type="text" id="simMessageText" value="Kese ho bhai? Nokia button phone se on-net msg kar raha hoon!" required placeholder="Type SMS content..."
+                    class="flex-1 px-3.5 py-2.5 rounded-xl bg-[#10191f] border border-white/10 text-xs text-white focus:outline-none focus:border-amber-400 transition">
+                  <button type="submit" id="simSubmitBtn" class="px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:brightness-110 active:scale-[0.98] text-[#06090c] font-bold text-xs transition flex items-center gap-1.5 shadow-lg shadow-amber-500/25 flex-shrink-0 font-heading">
+                    <span>Send SMS</span>
+                    <span>🚀</span>
+                  </button>
+                </div>
+              </div>
+
+              <div id="simResultBox" class="hidden p-3 rounded-xl bg-[#10191f] border border-amber-500/30 text-xs font-mono">
+                <!-- Result injected -->
+              </div>
+            </form>
+          </div>
+
+          <!-- 3. Gateway Configuration & Webhook Endpoints -->
+          <div class="p-4 sm:p-5 rounded-2xl bg-[#0b1115] border border-white/10 space-y-3">
+            <div class="flex items-center justify-between">
+              <h4 class="text-xs font-bold text-amber-400 font-heading uppercase tracking-wider flex items-center gap-1.5">
+                <span>⚙️ Gateway Setup & Number Customization</span>
+              </h4>
+            </div>
+
+            <!-- Webhook URL Display & Copy -->
+            <div>
+              <label class="block text-[11px] font-medium text-[#94a3b8] mb-1">Live Inbound Webhook URL (Put this in Android SMS Gateway or Twilio)</label>
+              <div class="flex items-center gap-2">
+                <input type="text" id="smsWebhookUrlDisplay" readonly value="" class="flex-1 px-3 py-2 rounded-xl bg-[#10191f] border border-white/10 text-xs font-mono text-emerald-400 focus:outline-none select-all">
+                <button type="button" onclick="copySmsWebhookUrl()" class="px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-medium transition flex-shrink-0">Copy 📋</button>
+              </div>
+            </div>
+
+            <!-- Custom Channel Numbers Settings -->
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-2 border-t border-white/5">
+              <div>
+                <label class="block text-[10.5px] font-medium text-[#94a3b8] mb-1">Channel 1 (AI) Number</label>
+                <input type="text" id="settingChannel1Num" placeholder="+18005550101" class="w-full px-3 py-2 rounded-xl bg-[#10191f] border border-white/10 text-xs font-mono text-white focus:outline-none focus:border-amber-400">
+              </div>
+              <div>
+                <label class="block text-[10.5px] font-medium text-[#94a3b8] mb-1">Channel 2 (User) Number</label>
+                <input type="text" id="settingChannel2Num" placeholder="+18005550102" class="w-full px-3 py-2 rounded-xl bg-[#10191f] border border-white/10 text-xs font-mono text-white focus:outline-none focus:border-amber-400">
+              </div>
+              <div>
+                <label class="block text-[10.5px] font-medium text-[#94a3b8] mb-1">Channel 3 (Group) Number</label>
+                <input type="text" id="settingChannel3Num" placeholder="+18005550103" class="w-full px-3 py-2 rounded-xl bg-[#10191f] border border-white/10 text-xs font-mono text-white focus:outline-none focus:border-amber-400">
+              </div>
+            </div>
+
+            <!-- Optional Cellular Gateway & Twilio Keys -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-2 border-t border-white/5">
+              <div>
+                <label class="block text-[10.5px] font-medium text-[#94a3b8] mb-1">Android Phone Local Gateway URL (Optional)</label>
+                <input type="text" id="settingSmsGatewayUrl" placeholder="http://192.168.1.50:8080/send" class="w-full px-3 py-2 rounded-xl bg-[#10191f] border border-white/10 text-xs font-mono text-white focus:outline-none focus:border-amber-400">
+              </div>
+              <div>
+                <label class="block text-[10.5px] font-medium text-[#94a3b8] mb-1">Twilio Account SID (Optional)</label>
+                <input type="text" id="settingTwilioSid" placeholder="ACxxxxxxxxxxxxxxxxxxxxxxxx" class="w-full px-3 py-2 rounded-xl bg-[#10191f] border border-white/10 text-xs font-mono text-white focus:outline-none focus:border-amber-400">
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              <div>
+                <label class="block text-[10.5px] font-medium text-[#94a3b8] mb-1">Twilio Auth Token (Optional)</label>
+                <input type="password" id="settingTwilioToken" placeholder="••••••••••••••••" class="w-full px-3 py-2 rounded-xl bg-[#10191f] border border-white/10 text-xs font-mono text-white focus:outline-none focus:border-amber-400">
+              </div>
+              <div>
+                <label class="block text-[10.5px] font-medium text-[#94a3b8] mb-1">Twilio Outbound Phone (Optional)</label>
+                <input type="text" id="settingTwilioFrom" placeholder="+18005550100" class="w-full px-3 py-2 rounded-xl bg-[#10191f] border border-white/10 text-xs font-mono text-white focus:outline-none focus:border-amber-400">
+              </div>
+            </div>
+
+            <button type="button" onclick="saveAllSmsHubSettings()" class="w-full py-3 rounded-xl bg-gradient-to-r from-[#00e599] to-[#00b87a] text-[#06090c] font-bold text-xs hover:brightness-110 transition shadow font-heading">
+              Save All SMS & Channel Settings
+            </button>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- Quick Connect Nokia Phone Modal -->
+    <div id="newSmsContactModal" class="fixed inset-0 z-[70] bg-black/85 backdrop-blur-xl hidden items-center justify-center p-4 select-none animate-fade-in">
+      <div class="bg-[#10191f] text-[#f8fafc] w-full max-w-md rounded-3xl border border-amber-500/30 p-6 shadow-2xl relative">
+        <div class="flex items-center justify-between pb-3 border-b border-white/10 mb-4">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center font-bold text-lg">📱</div>
+            <div>
+              <h3 class="text-sm font-bold text-white font-heading">Connect Nokia Phone</h3>
+              <p class="text-[11px] text-[#94a3b8]">Chat with offline button phone via SIM SMS</p>
+            </div>
+          </div>
+          <button id="closeNewSmsContactModalBtn" class="text-[#94a3b8] hover:text-white p-2 text-sm rounded-lg hover:bg-white/10">✕</button>
+        </div>
+
+        <form id="newSmsContactForm" class="space-y-4">
+          <div>
+            <label class="block text-xs font-medium text-[#94a3b8] mb-1.5">Nokia / Button Phone Mobile Number</label>
+            <input type="text" id="smsContactPhoneInput" required placeholder="e.g. +923001234567 or +14155552671"
+              class="w-full px-4 py-3 rounded-2xl bg-[#0b1115] border border-white/10 text-xs font-mono text-[#f8fafc] focus:outline-none focus:border-amber-400 transition">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-[#94a3b8] mb-1.5">Contact Name / Label</label>
+            <input type="text" id="smsContactNameInput" placeholder="e.g. Abba Jaan Nokia, Office Button Phone"
+              class="w-full px-4 py-3 rounded-2xl bg-[#0b1115] border border-white/10 text-xs text-[#f8fafc] focus:outline-none focus:border-amber-400 transition">
+          </div>
+          <button type="submit" class="w-full py-3.5 rounded-2xl bg-gradient-to-r from-amber-500 to-amber-600 text-[#06090c] font-bold text-xs hover:brightness-110 active:scale-[0.98] transition shadow-lg shadow-amber-500/25">
+            Start Nokia SMS Chat
+          </button>
+        </form>
       </div>
     </div>
 
@@ -2530,12 +2784,25 @@
             online: true
           };
         }
+
+        // Live Header Subtitle & Online Beacon Instant Refresh
+        if (activeChatId && activePartnerUid && activeChatType !== 'group') {
+          const partner = usersMap[activePartnerUid];
+          if (partner) {
+            const onlineNow = isUserOnline(partner);
+            if (activeHeaderOnlineBeacon) activeHeaderOnlineBeacon.classList.toggle('hidden', !onlineNow);
+            if (!typingUsers.get(activePartnerUid) && activeChatSubtitle) {
+              activeChatSubtitle.innerText = onlineNow ? 'online' : (partner.lastSeen ? `last seen at ${formatTime(partner.lastSeen)}` : 'offline');
+            }
+          }
+        }
+
         saveLocalData();
         renderSidebarList();
         renderAvailableUsersDrawer();
       });
 
-      // 2. Live Messages Sync
+      // 2. Live Messages Sync (Real-time Sent ✓ -> Delivered ✓✓ -> Read ✓✓)
       let isFirstMessagesSync = true;
       const notifiedMessageIds = new Set();
 
@@ -2551,7 +2818,7 @@
               list.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
               updatedDb[chatId] = list;
 
-              if (activeChatId === chatId) {
+              if (activeChatId === chatId && document.visibilityState === 'visible') {
                 list.forEach(m => {
                   if (m.senderId !== myUid && m.status !== 'read') {
                     m.status = 'read';
@@ -2561,6 +2828,11 @@
                 });
               } else {
                 list.forEach(m => {
+                  // Mark as DELIVERED if recipient received in background/offline-to-online
+                  if (m.senderId !== myUid && m.status === 'sent') {
+                    m.status = 'delivered';
+                    firebaseUpdate('messages/' + chatId + '/' + m.id, { status: 'delivered' });
+                  }
                   if (!notifiedMessageIds.has(m.id)) {
                     notifiedMessageIds.add(m.id);
                     // ONLY notify if this is NOT initial page load AND message was sent recently (< 25s)
@@ -2660,7 +2932,48 @@
         if (currentUser && currentUser.uid && fbDb) {
           myUserRef.update({ online: true, lastSeen: Date.now() });
         }
-      }, 20000);
+      }, 15000);
+
+      // User Interaction Activity Throttle (keeps lastSeen live on mouse/key activity)
+      let lastActivityPresence = 0;
+      const onUserActivity = () => {
+        const now = Date.now();
+        if (now - lastActivityPresence > 15000) {
+          lastActivityPresence = now;
+          if (currentUser && currentUser.uid && fbDb) {
+            myUserRef.update({ online: true, lastSeen: now });
+          }
+        }
+      };
+      window.addEventListener('mousemove', onUserActivity, { passive: true });
+      window.addEventListener('keydown', onUserActivity, { passive: true });
+      window.addEventListener('touchstart', onUserActivity, { passive: true });
+
+      // Window Focus & Visibility Change Read Sync
+      window.addEventListener('focus', markActiveChatAsRead);
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+          markActiveChatAsRead();
+          onUserActivity();
+        }
+      });
+
+      function markActiveChatAsRead() {
+        if (activeChatId && currentUser && messagesDb[activeChatId]) {
+          let hasUpdated = false;
+          messagesDb[activeChatId].forEach(m => {
+            if (m.senderId !== currentUser.uid && m.status !== 'read') {
+              m.status = 'read';
+              firebaseUpdate('messages/' + activeChatId + '/' + m.id, { status: 'read' });
+              hasUpdated = true;
+            }
+          });
+          if (hasUpdated) {
+            loadActiveChatMessages();
+            renderSidebarList();
+          }
+        }
+      }
 
       window.addEventListener('beforeunload', () => {
         if (currentUser && currentUser.uid && fbDb) {
@@ -4154,6 +4467,9 @@
           if (m.senderId !== currentUser.uid && m.status !== 'read') {
             m.status = 'read';
             hasUnread = true;
+            if (window.fbDb) {
+              firebaseUpdate('messages/' + chatId + '/' + m.id, { status: 'read' });
+            }
           }
         });
         if (hasUnread) {
@@ -5506,8 +5822,309 @@
     });
 
     // ----------------------------------------------------------------------
-    // 15B. Nokia / Cellular SMS Contact & Gateway Handlers
+    // 15B. Nokia 2-Way Cellular SMS Hub & Gateway Handlers (3 Channels)
     // ----------------------------------------------------------------------
+    const DEFAULT_SMS_CHANNELS = {
+      channel1_ai: '+1 (800) 555-0101',
+      channel2_user: '+1 (800) 555-0102',
+      channel3_group: '+1 (800) 555-0103'
+    };
+
+    function getSmsChannelNumbers() {
+      return {
+        channel1_ai: localStorage.getItem('xhaodin_sms_chan1') || DEFAULT_SMS_CHANNELS.channel1_ai,
+        channel2_user: localStorage.getItem('xhaodin_sms_chan2') || DEFAULT_SMS_CHANNELS.channel2_user,
+        channel3_group: localStorage.getItem('xhaodin_sms_chan3') || DEFAULT_SMS_CHANNELS.channel3_group
+      };
+    }
+
+    window.openNokiaSmsHubModal = function() {
+      const modal = document.getElementById('nokiaSmsHubModal');
+      if (!modal) return;
+
+      const nums = getSmsChannelNumbers();
+      const c1Disp = document.getElementById('smsChannel1DisplayNum');
+      const c2Disp = document.getElementById('smsChannel2DisplayNum');
+      const c3Disp = document.getElementById('smsChannel3DisplayNum');
+      if (c1Disp) c1Disp.innerText = nums.channel1_ai;
+      if (c2Disp) c2Disp.innerText = nums.channel2_user;
+      if (c3Disp) c3Disp.innerText = nums.channel3_group;
+
+      const c1In = document.getElementById('settingChannel1Num');
+      const c2In = document.getElementById('settingChannel2Num');
+      const c3In = document.getElementById('settingChannel3Num');
+      if (c1In) c1In.value = nums.channel1_ai;
+      if (c2In) c2In.value = nums.channel2_user;
+      if (c3In) c3In.value = nums.channel3_group;
+
+      const gwUrl = document.getElementById('settingSmsGatewayUrl');
+      const sid = document.getElementById('settingTwilioSid');
+      const token = document.getElementById('settingTwilioToken');
+      const fromNum = document.getElementById('settingTwilioFrom');
+      if (gwUrl) gwUrl.value = localStorage.getItem('xhaodin_sms_gateway_url') || '';
+      if (sid) sid.value = localStorage.getItem('xhaodin_twilio_sid') || '';
+      if (token) token.value = localStorage.getItem('xhaodin_twilio_token') || '';
+      if (fromNum) fromNum.value = localStorage.getItem('xhaodin_twilio_from') || '';
+
+      const webhookDisplay = document.getElementById('smsWebhookUrlDisplay');
+      if (webhookDisplay) {
+        const origin = window.location.origin && window.location.origin !== 'null' ? window.location.origin : 'https://xhaodin.app';
+        webhookDisplay.value = `${origin}/api/sms/incoming`;
+      }
+
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    };
+
+    window.closeNokiaSmsHubModal = function() {
+      const modal = document.getElementById('nokiaSmsHubModal');
+      if (modal) {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+      }
+    };
+
+    document.getElementById('closeNokiaSmsHubModalBtn')?.addEventListener('click', closeNokiaSmsHubModal);
+
+    window.copySmsWebhookUrl = function() {
+      const webhookDisplay = document.getElementById('smsWebhookUrlDisplay');
+      if (webhookDisplay) {
+        navigator.clipboard.writeText(webhookDisplay.value).then(() => {
+          showToast('✅ Webhook URL copied to clipboard!');
+        }).catch(() => {
+          webhookDisplay.select();
+          document.execCommand('copy');
+          showToast('✅ Webhook URL copied!');
+        });
+      }
+    };
+
+    window.quickFillSmsSimulator = function(channelKey) {
+      const targetSelect = document.getElementById('simTargetChannel');
+      const msgInput = document.getElementById('simMessageText');
+      if (targetSelect) targetSelect.value = channelKey;
+      if (msgInput) {
+        if (channelKey === 'channel1_ai') {
+          msgInput.value = 'AI Kese ho? 15 * 24 kitna hota hai?';
+        } else if (channelKey === 'channel3_group') {
+          msgInput.value = 'GROUP Salam squad! Main Nokia se chat kar raha hoon!';
+        } else {
+          msgInput.value = 'Salam bhai! Nokia se direct personal msg kar raha hoon.';
+        }
+      }
+      document.getElementById('simSenderPhone')?.focus();
+    };
+
+    window.saveAllSmsHubSettings = function() {
+      const c1 = document.getElementById('settingChannel1Num')?.value.trim();
+      const c2 = document.getElementById('settingChannel2Num')?.value.trim();
+      const c3 = document.getElementById('settingChannel3Num')?.value.trim();
+      const gwUrl = document.getElementById('settingSmsGatewayUrl')?.value.trim();
+      const twSid = document.getElementById('settingTwilioSid')?.value.trim();
+      const twToken = document.getElementById('settingTwilioToken')?.value.trim();
+      const twFrom = document.getElementById('settingTwilioFrom')?.value.trim();
+
+      if (c1) localStorage.setItem('xhaodin_sms_chan1', c1);
+      if (c2) localStorage.setItem('xhaodin_sms_chan2', c2);
+      if (c3) localStorage.setItem('xhaodin_sms_chan3', c3);
+
+      if (gwUrl) localStorage.setItem('xhaodin_sms_gateway_url', gwUrl);
+      else localStorage.removeItem('xhaodin_sms_gateway_url');
+
+      if (twSid) localStorage.setItem('xhaodin_twilio_sid', twSid);
+      else localStorage.removeItem('xhaodin_twilio_sid');
+
+      if (twToken) localStorage.setItem('xhaodin_twilio_token', twToken);
+      else localStorage.removeItem('xhaodin_twilio_token');
+
+      if (twFrom) localStorage.setItem('xhaodin_twilio_from', twFrom);
+      else localStorage.removeItem('xhaodin_twilio_from');
+
+      const nums = getSmsChannelNumbers();
+      const c1Disp = document.getElementById('smsChannel1DisplayNum');
+      const c2Disp = document.getElementById('smsChannel2DisplayNum');
+      const c3Disp = document.getElementById('smsChannel3DisplayNum');
+      if (c1Disp) c1Disp.innerText = nums.channel1_ai;
+      if (c2Disp) c2Disp.innerText = nums.channel2_user;
+      if (c3Disp) c3Disp.innerText = nums.channel3_group;
+
+      showToast('✅ All SMS & 3-Channel Settings saved successfully!');
+    };
+
+    // Live Nokia SMS Simulator Form Submit
+    document.getElementById('smsSimulatorForm')?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const senderPhone = document.getElementById('simSenderPhone')?.value.trim();
+      const targetChannel = document.getElementById('simTargetChannel')?.value;
+      const messageText = document.getElementById('simMessageText')?.value.trim();
+      const resultBox = document.getElementById('simResultBox');
+      const submitBtn = document.getElementById('simSubmitBtn');
+
+      if (!senderPhone || !messageText) return;
+
+      const nums = getSmsChannelNumbers();
+      let destPhone = nums.channel2_user;
+      if (targetChannel === 'channel1_ai') destPhone = nums.channel1_ai;
+      else if (targetChannel === 'channel3_group') destPhone = nums.channel3_group;
+
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<span>Simulating...</span> <span class="animate-spin">⏳</span>';
+      }
+
+      if (resultBox) {
+        resultBox.classList.remove('hidden');
+        resultBox.innerHTML = '<span class="text-amber-400">⚡ Dispatching cellular packet to /api/sms/incoming webhook...</span>';
+      }
+
+      try {
+        const payload = {
+          From: senderPhone,
+          To: destPhone,
+          Body: messageText,
+          channel: targetChannel
+        };
+
+        let response = null;
+        let responseData = null;
+
+        try {
+          response = await fetch('/api/sms/incoming', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+          if (response.ok) {
+            responseData = await response.json();
+          }
+        } catch (apiErr) {
+          console.warn('Local fetch /api/sms/incoming error, falling back to direct Firebase dispatch:', apiErr);
+        }
+
+        // Direct Firebase RTDB simulation fallback
+        if (!responseData && window.fbDb) {
+          const cleanPhone = senderPhone.replace(/[^0-9]/g, '');
+          const smsUid = `sms_${cleanPhone}`;
+          const now = Date.now();
+          const timeFormatted = new Date(now).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+
+          const contactProfile = {
+            uid: smsUid,
+            displayName: `📱 Nokia (${senderPhone})`,
+            username: `📱 Nokia (${senderPhone})`,
+            phoneNumber: senderPhone,
+            email: `${smsUid}@sms.xhaodin.local`,
+            avatar: `https://api.dicebear.com/7.x/bottts/svg?seed=${cleanPhone}`,
+            isSmsContact: true,
+            online: true,
+            lastSeen: now,
+            status: `Nokia SMS (${targetChannel === 'channel1_ai' ? '🤖 AI Channel' : targetChannel === 'channel3_group' ? '👥 Squad Channel' : '👤 Direct Channel'})`
+          };
+          fbDb.ref(`users/${smsUid}`).update(contactProfile);
+
+          const msgId = `msg_sms_${now}_${Math.random().toString(36).substring(2, 6)}`;
+          const msgPayload = {
+            id: msgId,
+            text: messageText,
+            senderId: smsUid,
+            senderName: `📱 Nokia (${senderPhone})`,
+            timestamp: now,
+            time: timeFormatted,
+            isSms: true,
+            channel: targetChannel,
+            mediaType: 'text',
+            status: 'delivered'
+          };
+          fbDb.ref(`messages/${smsUid}/${msgId}`).set(msgPayload);
+
+          if (targetChannel === 'channel3_group') {
+            const groupMsgId = `msg_group_sms_${now}_${Math.random().toString(36).substring(2, 6)}`;
+            fbDb.ref(`messages/group_squad/${groupMsgId}`).set({
+              id: groupMsgId,
+              text: `📱 [Nokia SMS] ${messageText}`,
+              senderId: smsUid,
+              senderName: `📱 Nokia (${senderPhone})`,
+              timestamp: now,
+              time: timeFormatted,
+              isSms: true,
+              mediaType: 'text',
+              status: 'delivered'
+            });
+          }
+
+          if (targetChannel === 'channel1_ai') {
+            setTimeout(() => {
+              const aiMsgId = `msg_ai_${now + 100}_${Math.random().toString(36).substring(2, 6)}`;
+              const aiText = generateAiSimReply(messageText);
+              fbDb.ref(`messages/${smsUid}/${aiMsgId}`).set({
+                id: aiMsgId,
+                text: aiText,
+                senderId: 'xhaodin_ai_bot',
+                senderName: '🤖 XHAODIN AI',
+                timestamp: now + 200,
+                time: new Date(now + 200).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }),
+                isSms: true,
+                isAI: true,
+                mediaType: 'text',
+                status: 'delivered'
+              });
+            }, 600);
+          }
+
+          responseData = {
+            success: true,
+            channel: targetChannel,
+            chatId: smsUid,
+            sender: senderPhone,
+            text: messageText
+          };
+        }
+
+        if (resultBox) {
+          resultBox.innerHTML = `
+            <div class="space-y-1 text-emerald-400">
+              <div class="font-bold flex items-center gap-1"><span>✅</span> <span>SMS Received & Live Dispatched!</span></div>
+              <div class="text-[11px] text-[#94a3b8] font-mono">Channel: <strong class="text-white">${targetChannel}</strong> | Sender: <strong class="text-white">${senderPhone}</strong></div>
+              <div class="text-[11px] text-[#00e599] mt-1">Live message is now visible in XHAODIN chats in real-time.</div>
+            </div>
+          `;
+        }
+
+        const cleanPhone = senderPhone.replace(/[^0-9]/g, '');
+        const smsUid = `sms_${cleanPhone}`;
+        if (targetChannel === 'channel3_group') {
+          openChat('group_squad', 'Squad Global', 'group', null);
+        } else {
+          openChat(smsUid, `📱 Nokia (${senderPhone})`, 'direct', smsUid);
+        }
+
+      } catch (err) {
+        console.error('Simulator error:', err);
+        if (resultBox) {
+          resultBox.innerHTML = `<span class="text-rose-400">❌ Error simulating SMS: ${escapeHtml(err.message)}</span>`;
+        }
+      } finally {
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.innerHTML = '<span>Send SMS</span> <span>🚀</span>';
+        }
+      }
+    });
+
+    function generateAiSimReply(query) {
+      const q = (query || '').toLowerCase();
+      if (/\b(hello|hi|hey|salam|assalam)\b/.test(q)) return "Assalam-o-Alaikum! XHAODIN AI Assistant hazir hai. Main aapki kya madad karoon?";
+      if (/\b(joke|latifa)\b/.test(q)) return "Teacher: 4 aur 4 kitne hotay hain? Student: Sochne ki baat hai sir, mil jayein to 8, na milein to 44! 😄";
+      if (/\b(\d+\s*[\+\-\*\/]\s*\d+)\b/.test(q)) {
+        try {
+          const res = Function('"use strict"; return (' + q.replace(/[^0-9\+\-\*\/\.\(\)\s]/g, '') + ')')();
+          return `🧮 Jawab: ${res}`;
+        } catch (e) {}
+      }
+      return `XHAODIN AI: Aapka Nokia SMS mila: "${query}". Main aapki poori madad karne ke liye hazir hoon!`;
+    }
+
+    // Quick Connect Nokia Contact Modal
     window.openSmsContactModal = function() {
       const modal = document.getElementById('newSmsContactModal');
       if (modal) {
@@ -5569,56 +6186,6 @@
       openChat(smsUid, contactName, 'direct', smsUid);
       renderSidebarList();
     });
-
-    window.openSmsGatewaySettings = function() {
-      const modal = document.getElementById('smsGatewaySettingsModal');
-      if (modal) {
-        const gwUrl = document.getElementById('settingSmsGatewayUrl');
-        const sid = document.getElementById('settingTwilioSid');
-        const token = document.getElementById('settingTwilioToken');
-        const fromNum = document.getElementById('settingTwilioFrom');
-
-        if (gwUrl) gwUrl.value = localStorage.getItem('xhaodin_sms_gateway_url') || '';
-        if (sid) sid.value = localStorage.getItem('xhaodin_twilio_sid') || '';
-        if (token) token.value = localStorage.getItem('xhaodin_twilio_token') || '';
-        if (fromNum) fromNum.value = localStorage.getItem('xhaodin_twilio_from') || '';
-
-        modal.classList.remove('hidden');
-        modal.classList.add('flex');
-      }
-    };
-
-    window.closeSmsGatewaySettings = function() {
-      const modal = document.getElementById('smsGatewaySettingsModal');
-      if (modal) {
-        modal.classList.add('hidden');
-        modal.classList.remove('flex');
-      }
-    };
-
-    document.getElementById('closeSmsGatewayModalBtn')?.addEventListener('click', closeSmsGatewaySettings);
-
-    window.saveSmsGatewaySettings = function() {
-      const gwUrl = document.getElementById('settingSmsGatewayUrl')?.value.trim();
-      const twSid = document.getElementById('settingTwilioSid')?.value.trim();
-      const twToken = document.getElementById('settingTwilioToken')?.value.trim();
-      const twFrom = document.getElementById('settingTwilioFrom')?.value.trim();
-
-      if (gwUrl) localStorage.setItem('xhaodin_sms_gateway_url', gwUrl);
-      else localStorage.removeItem('xhaodin_sms_gateway_url');
-
-      if (twSid) localStorage.setItem('xhaodin_twilio_sid', twSid);
-      else localStorage.removeItem('xhaodin_twilio_sid');
-
-      if (twToken) localStorage.setItem('xhaodin_twilio_token', twToken);
-      else localStorage.removeItem('xhaodin_twilio_token');
-
-      if (twFrom) localStorage.setItem('xhaodin_twilio_from', twFrom);
-      else localStorage.removeItem('xhaodin_twilio_from');
-
-      alert('✅ SMS Gateway Settings saved successfully!');
-      closeSmsGatewaySettings();
-    };
 
     document.getElementById('drawerActionAddSmsContact')?.addEventListener('click', openSmsContactModal);
 
